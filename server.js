@@ -26,7 +26,7 @@ const CONFIG = {
   ADMIN_NAME: process.env.ADMIN_NAME || 'Administrador',
   DATABASE_PATH: process.env.DATABASE_PATH || './data/buildos.db',
   DATA_DIR: path.join(__dirname, 'data'),
-  RESEND_API_KEY: process.env.RESEND_API_KEY || '',
+  RESEND_API_KEY: process.env.RESEND_API_KEY || 're_iB3DASjp_2E5k8dFD4dgvVPYkuSFUMqBV',
   EMAIL_FROM: process.env.EMAIL_FROM || 'BuildOS <onboarding@resend.dev>',
 };
 
