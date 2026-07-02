@@ -1,0 +1,18 @@
+{
+  "name": "buildos-intranet",
+  "version": "4.0.0",
+  "description": "BuildOS Intranet - Backend completo con auth, BD, IA y WhatsApp",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
