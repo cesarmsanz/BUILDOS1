@@ -449,37 +449,59 @@ function setAIKeyInDb(key) {
   db.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('ai_key', ?, unixepoch())").run(key);
 }
 
+// Verificar si es admin: por token JWT o por contrasena de entorno
+function isAdminRequest(req) {
+  // Metodo 1: Token JWT normal
+  const user = authMiddleware(req);
+  if (user && user.role === 'admin') return { ok: true, user };
+  // Metodo 2: Contrasena de admin en body (para primera configuracion)
+  return { ok: false, user: null };
+}
+
 async function handleGetAIConfig(req, res) {
-  const user = requireAuth(req, res, 'admin');
-  if (!user) return;
+  const auth = isAdminRequest(req);
+  // Permitir ver estado de IA sin autenticacion (solo si esta configurada)
   const dbKey = getAIKeyFromDb();
   const envKey = CONFIG.KIMI_API_KEY || '';
   const activeKey = dbKey || envKey;
   send(res, 200, {
     configured: activeKey.length > 20,
     source: dbKey ? 'database' : (envKey ? 'environment' : 'none'),
-    // NUNCA enviamos la key completa al frontend, solo los ultimos 4 caracteres
     keyHint: activeKey ? '...' + activeKey.slice(-4) : '',
-    model: 'moonshot-v1-32k'
+    model: 'moonshot-v1-32k',
+    requiresAuth: !auth.ok
   });
 }
 async function handleSetAIConfig(req, res) {
-  const user = requireAuth(req, res, 'admin');
-  if (!user) return;
-  const { apiKey } = await parseBody(req);
+  const auth = isAdminRequest(req);
+  const body = await parseBody(req);
+  
+  // Si no hay autenticacion JWT, verificar contrasena de admin
+  if (!auth.ok) {
+    const { adminPassword } = body;
+    if (!adminPassword || adminPassword !== CONFIG.ADMIN_PASSWORD) {
+      return send(res, 401, { error: 'No autenticado. Introduce la contrasena de administrador.' });
+    }
+  }
+  
+  const { apiKey } = body;
   if (!apiKey || apiKey.length < 20) {
     return send(res, 400, { error: 'API Key invalida. Debe tener al menos 20 caracteres.' });
   }
   setAIKeyInDb(apiKey);
-  // Log de auditoria
-  logActivity(user.id, null, 'ai_config_updated', { by: user.email });
+  logActivity(auth.user?.id || 1, null, 'ai_config_updated', { by: auth.user?.email || 'setup' });
   send(res, 200, { success: true, message: 'API Key guardada correctamente' });
 }
 async function handleDeleteAIConfig(req, res) {
-  const user = requireAuth(req, res, 'admin');
-  if (!user) return;
+  const auth = isAdminRequest(req);
+  if (!auth.ok) {
+    const body = await parseBody(req).catch(() => ({}));
+    if (!body.adminPassword || body.adminPassword !== CONFIG.ADMIN_PASSWORD) {
+      return send(res, 401, { error: 'No autenticado.' });
+    }
+  }
   setAIKeyInDb('');
-  logActivity(user.id, null, 'ai_config_deleted', { by: user.email });
+  logActivity(auth.user?.id || 1, null, 'ai_config_deleted', { by: auth.user?.email || 'setup' });
   send(res, 200, { success: true, message: 'API Key eliminada' });
 }
 function logActivity(userId, projectId, action, details) {
