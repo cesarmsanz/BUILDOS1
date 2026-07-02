@@ -404,9 +404,21 @@ async function handleAuthRegister(req, res) {
   const { email, password, name, role = 'visualizador', code } = await parseBody(req);
   if (!email || !password || !name || !code) return send(res, 400, { error: 'Faltan campos' });
 
-  // Verificar que el codigo fue validado
-  const codeResult = await verifyCode(email, code);
-  if (!codeResult.valid) return send(res, 400, { error: 'Codigo no verificado. Solicita uno nuevo.' });
+  // Verificar que el codigo existe y es correcto (ya fue validado en /verify-code)
+  // Solo comprobamos que no este expirado y que el email coincide
+  let codeValid = false;
+  if (useJsonFallback) {
+    const record = jsonDb.verificationCodes?.find(c => c.email === email && c.code === code);
+    if (record && record.verified && record.expires_at > Math.floor(Date.now()/1000)) {
+      codeValid = true;
+    }
+  } else {
+    const record = db.prepare('SELECT * FROM verification_codes WHERE email = ? AND code = ? AND verified = 1').get(email, code);
+    if (record && record.expires_at > Math.floor(Date.now()/1000)) {
+      codeValid = true;
+    }
+  }
+  if (!codeValid) return send(res, 400, { error: 'Codigo no verificado o expirado. Solicita uno nuevo.' });
 
   try {
     if (useJsonFallback) {
