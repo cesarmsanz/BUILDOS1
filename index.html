@@ -563,6 +563,135 @@ input[type=range]{width:100%;accent-color:var(--blue);cursor:pointer;margin-bott
 .co-total-bar .label{font-size:10px;font-weight:700}
 .co-total-bar .val{font-size:12px;font-family:var(--mono);font-weight:800}
 .co-empty{padding:20px;text-align:center;color:var(--ink3);font-size:11px}
+/* ================================================================
+   RESPONSIVE - MOVIL Y TABLET
+   ================================================================ */
+.menu-toggle,.panel-toggle,.overlay{display:none}
+
+/* --- MOVIL (max-width: 768px) --- */
+@media(max-width:768px){
+  /* Layout general */
+  #app{flex-direction:column}
+  #sb{position:fixed;left:0;top:0;width:230px;height:100vh;z-index:1000;
+       transform:translateX(-230px);transition:transform .3s ease;
+       border-right:1px solid var(--nav3)}
+  #sb.open{transform:translateX(0)}
+  #main{width:100%;margin-left:0}
+  #rp{position:fixed;right:0;top:0;width:300px;height:100vh;z-index:1000;
+      transform:translateX(300px);transition:transform .3s ease;
+      border-left:1px solid var(--border)}
+  #rp.open{transform:translateX(0)}
+
+  /* Botones toggle */
+  .menu-toggle{display:block;position:fixed;top:8px;left:8px;z-index:1001;
+               width:36px;height:36px;background:var(--nav2);
+               border:1px solid var(--nav3);border-radius:6px;
+               font-size:18px;color:#fff;cursor:pointer;
+               display:flex;align-items:center;justify-content:center;
+               padding:0;transition:all .1s}
+  .menu-toggle:hover{background:var(--nav3)}
+  .panel-toggle{display:block;position:fixed;top:8px;right:8px;z-index:1001;
+                width:36px;height:36px;background:var(--white);
+                border:1px solid var(--border);border-radius:6px;
+                font-size:18px;color:var(--ink2);cursor:pointer;
+                display:flex;align-items:center;justify-content:center;
+                padding:0;transition:all .1s}
+  .panel-toggle:hover{border-color:var(--blue);color:var(--blue)}
+
+  /* Overlay */
+  .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);
+           z-index:999}
+  .overlay.active{display:block}
+
+  /* Cabecera */
+  #hdr{padding:8px 12px;flex-wrap:wrap}
+  .hdr-proj{font-size:12px}
+  .hbtn{padding:4px 8px;font-size:10px}
+  .hdr-acts{gap:3px;margin-left:0}
+  /* Ocultar badges menos importantes en movil: solo mostrar AI y login */
+  .hdr-acts .api-badge:not(#hdr-ai):not(#hdr-login){display:none}
+
+  /* Pestanas scroll horizontal */
+  .tabs-strip{overflow-x:auto;white-space:nowrap;
+              -webkit-overflow-scrolling:touch;flex-wrap:nowrap;
+              scrollbar-width:none}
+  .tabs-strip::-webkit-scrollbar{display:none}
+  .tb{flex-shrink:0;padding:8px 12px;font-size:11px}
+
+  /* Tablas scroll horizontal */
+  .ph,.prow{min-width:600px}
+  .grid{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .stock-row{min-width:600px}
+  .oficio-row{min-width:500px}
+  .rate-row,.rate-hdr{min-width:400px}
+  .tier-row{min-width:500px}
+  .gantt-canvas-wrap{-webkit-overflow-scrolling:touch}
+  .gantt-table{min-width:600px}
+
+  /* Modales */
+  .mo{width:95vw;max-width:none;max-height:90vh;margin:0 2.5vw}
+  .mo.wide{width:95vw;max-width:none}
+  .sad-layout{grid-template-columns:1fr;gap:10px;min-height:auto}
+
+  /* Canvas plano */
+  #plan-canvas{width:100%;height:50vh}
+  .plan-main{grid-template-columns:1fr;height:auto}
+  .plan-area{flex-direction:column}
+  .zones-panel{width:100%;max-height:200px}
+  .plan-wrap{min-height:250px}
+
+  /* Catalogo */
+  .cat-layout{grid-template-columns:1fr;height:auto}
+
+  /* Panel terminal obra */
+  #obra-chat-area{height:calc(100vh - 250px)}
+
+  /* Estrategia */
+  .est-grid{grid-template-columns:1fr}
+
+  /* WhatsApp panel */
+  .wa-panel{grid-template-columns:1fr;grid-template-rows:auto 1fr auto}
+  .wa-contact-list{display:none;border-right:none;border-bottom:1px solid var(--border)}
+  .wa-contact-list.show{display:block;grid-row:auto;max-height:40vh}
+  .wa-chat{grid-column:1}
+  .wa-input-area{grid-column:1}
+
+  /* Wizard */
+  .wz-box{width:96%;max-width:none}
+  .wz-body{grid-template-columns:1fr;padding:14px}
+  .wz-nav-col{display:none}
+  .wz-row2,.wz-row3{grid-template-columns:1fr}
+
+  /* PIN overlay */
+  .pin-box{padding:24px;width:95%;max-width:320px}
+
+  /* Right panel full height en movil */
+  #rp .rp-s{padding:14px 16px}
+  #rp .rp-lbl{font-size:10px}
+
+  /* Toast mas centrado en movil */
+  .toast{left:16px;right:16px;bottom:16px;text-align:center}
+
+  /* Header con padding para los botones toggle */
+  #hdr{padding-left:50px;padding-right:50px}
+}
+
+/* --- TABLET (769px - 1024px) --- */
+@media(min-width:769px) and (max-width:1024px){
+  #sb{width:200px}
+  #rp{width:200px}
+  .plan-main{grid-template-columns:1fr 220px}
+  .cat-layout{grid-template-columns:180px 1fr}
+  .hdr-proj{font-size:12px}
+  .hbtn{padding:4px 8px;font-size:10px}
+  .ph,.prow{gap:4px;padding:5px 9px}
+  .pr-name{font-size:11px}
+}
+
+/* --- DESKTOP (1025px+) --- */
+@media(min-width:1025px){
+  .menu-toggle,.panel-toggle,.overlay{display:none!important}
+}
 </style><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script></head>
 <body>
 <!-- PIN LOGIN OVERLAY -->
@@ -8073,6 +8202,58 @@ async function initBuildOS(){
   }
 }
 
+// ===== RESPONSIVE: Control de paneles en movil =====
+function initResponsive(){
+  // Crear boton hamburguesa si no existe
+  if(!document.getElementById('menu-toggle')){
+    const btn = document.createElement('button');
+    btn.id = 'menu-toggle';
+    btn.className = 'menu-toggle';
+    btn.innerHTML = '\u2630';
+    btn.title = 'Menu';
+    btn.onclick = toggleSidebar;
+    document.body.appendChild(btn);
+  }
+  // Crear boton para panel derecho
+  if(!document.getElementById('panel-toggle')){
+    const btn = document.createElement('button');
+    btn.id = 'panel-toggle';
+    btn.className = 'panel-toggle';
+    btn.innerHTML = '\u2261';
+    btn.title = 'Detalles';
+    btn.onclick = toggleRightPanel;
+    document.body.appendChild(btn);
+  }
+  // Crear overlay
+  if(!document.getElementById('mobile-overlay')){
+    const ov = document.createElement('div');
+    ov.id = 'mobile-overlay';
+    ov.className = 'overlay';
+    ov.onclick = closeAllPanels;
+    document.body.appendChild(ov);
+  }
+}
+function toggleSidebar(){
+  document.querySelector('.sidebar').classList.toggle('open');
+  document.getElementById('mobile-overlay').classList.toggle('active');
+}
+function toggleRightPanel(){
+  document.querySelector('.right-panel').classList.toggle('open');
+  document.getElementById('mobile-overlay').classList.toggle('active');
+}
+function closeAllPanels(){
+  document.querySelector('.sidebar').classList.remove('open');
+  document.querySelector('.right-panel').classList.remove('open');
+  document.getElementById('mobile-overlay').classList.remove('active');
+}
+// Cerrar paneles al cambiar de tab
+const _origSwitchTab = switchTab;
+switchTab = function(tab){
+  _origSwitchTab(tab);
+  closeAllPanels();
+};
+
+initResponsive();
 initBuildOS();
 
 window.addEventListener('resize',()=>{if(curTab==='calendar')drawGantt(P());});
