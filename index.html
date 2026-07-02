@@ -7930,10 +7930,10 @@ async function apiLogin(email, password){
   return {success: false, error: data.error || 'Error de login'};
 }
 
-async function apiRegister(email, password, name, role){
+async function apiRegister(email, password, name, role, code){
   const r = await fetch('/api/auth/register', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({email, password, name, role})
+    body: JSON.stringify({email, password, name, role, code})
   });
   const data = await r.json();
   if(r.ok && data.token){
@@ -8018,28 +8018,47 @@ function showLoginScreen(){
           <button onclick="doLogin()" id="btn-login" style="width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;font-family:var(--font)">Entrar</button>
         </div>
         <div id="auth-form-register" style="display:none">
-          <div class="fr" style="margin-bottom:12px">
-            <label style="font-size:10px;font-weight:700;color:var(--ink3)">Nombre completo</label>
-            <input id="reg-name" type="text" placeholder="Juan Perez" style="width:100%;padding:10px 12px;border:1px solid var(--b);border-radius:6px;background:var(--bg);color:var(--ink);font-size:13px;font-family:var(--font);margin-top:4px;box-sizing:border-box">
+          <!-- PASO 1: Email -->
+          <div id="reg-step-1">
+            <div style="font-size:11px;color:var(--ink2);margin-bottom:14px;text-align:center">Paso 1 de 3: Introduce tu email para recibir un codigo de verificacion.</div>
+            <div class="fr" style="margin-bottom:14px">
+              <label style="font-size:10px;font-weight:700;color:var(--ink3)">Email</label>
+              <input id="reg-email" type="email" placeholder="tu@email.com" style="width:100%;padding:10px 12px;border:1px solid var(--b);border-radius:6px;background:var(--bg);color:var(--ink);font-size:13px;font-family:var(--font);margin-top:4px;box-sizing:border-box" onkeydown="if(event.key==='Enter')doSendCode()">
+            </div>
+            <button onclick="doSendCode()" id="btn-send-code" style="width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;font-family:var(--font)">Enviar codigo</button>
           </div>
-          <div class="fr" style="margin-bottom:12px">
-            <label style="font-size:10px;font-weight:700;color:var(--ink3)">Email</label>
-            <input id="reg-email" type="email" placeholder="tu@email.com" style="width:100%;padding:10px 12px;border:1px solid var(--b);border-radius:6px;background:var(--bg);color:var(--ink);font-size:13px;font-family:var(--font);margin-top:4px;box-sizing:border-box">
+          <!-- PASO 2: Codigo -->
+          <div id="reg-step-2" style="display:none">
+            <div style="font-size:11px;color:var(--ink2);margin-bottom:14px;text-align:center">Paso 2 de 3: Hemos enviado un codigo a <b id="reg-email-display"></b>. Introcelo abajo.</div>
+            <div class="fr" style="margin-bottom:14px">
+              <label style="font-size:10px;font-weight:700;color:var(--ink3)">Codigo de 6 digitos</label>
+              <input id="reg-code" type="text" placeholder="123456" maxlength="6" style="width:100%;padding:10px 12px;border:1px solid var(--b);border-radius:6px;background:var(--bg);color:var(--ink);font-size:13px;font-family:var(--font);margin-top:4px;box-sizing:border-box;text-align:center;letter-spacing:8px;font-size:18px;font-weight:700" onkeydown="if(event.key==='Enter')doVerifyCode()">
+            </div>
+            <button onclick="doVerifyCode()" id="btn-verify-code" style="width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;font-family:var(--font);margin-bottom:8px">Verificar codigo</button>
+            <button onclick="doSendCode()" id="btn-resend-code" style="width:100%;padding:8px;background:transparent;color:var(--ink3);border:1px solid var(--b);border-radius:8px;font-weight:600;font-size:11px;cursor:pointer;font-family:var(--font)">Reenviar codigo</button>
           </div>
-          <div class="fr" style="margin-bottom:12px">
-            <label style="font-size:10px;font-weight:700;color:var(--ink3)">Password</label>
-            <input id="reg-password" type="password" placeholder="Minimo 6 caracteres" style="width:100%;padding:10px 12px;border:1px solid var(--b);border-radius:6px;background:var(--bg);color:var(--ink);font-size:13px;font-family:var(--font);margin-top:4px;box-sizing:border-box">
+          <!-- PASO 3: Completar registro -->
+          <div id="reg-step-3" style="display:none">
+            <div style="font-size:11px;color:var(--green);margin-bottom:14px;text-align:center;font-weight:600">✓ Email verificado. Completa tu registro.</div>
+            <div class="fr" style="margin-bottom:12px">
+              <label style="font-size:10px;font-weight:700;color:var(--ink3)">Nombre completo</label>
+              <input id="reg-name" type="text" placeholder="Juan Perez" style="width:100%;padding:10px 12px;border:1px solid var(--b);border-radius:6px;background:var(--bg);color:var(--ink);font-size:13px;font-family:var(--font);margin-top:4px;box-sizing:border-box">
+            </div>
+            <div class="fr" style="margin-bottom:12px">
+              <label style="font-size:10px;font-weight:700;color:var(--ink3)">Password</label>
+              <input id="reg-password" type="password" placeholder="Minimo 6 caracteres" style="width:100%;padding:10px 12px;border:1px solid var(--b);border-radius:6px;background:var(--bg);color:var(--ink);font-size:13px;font-family:var(--font);margin-top:4px;box-sizing:border-box">
+            </div>
+            <div class="fr" style="margin-bottom:18px">
+              <label style="font-size:10px;font-weight:700;color:var(--ink3)">Rol</label>
+              <select id="reg-role" style="width:100%;padding:10px 12px;border:1px solid var(--b);border-radius:6px;background:var(--bg);color:var(--ink);font-size:13px;font-family:var(--font);margin-top:4px;cursor:pointer">
+                <option value="visualizador">Visualizador</option>
+                <option value="instalador">Instalador</option>
+                <option value="comercial">Comercial</option>
+                <option value="jefe_obra">Jefe de Obra</option>
+              </select>
+            </div>
+            <button onclick="doRegister()" id="btn-register" style="width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;font-family:var(--font)">Crear cuenta</button>
           </div>
-          <div class="fr" style="margin-bottom:18px">
-            <label style="font-size:10px;font-weight:700;color:var(--ink3)">Rol</label>
-            <select id="reg-role" style="width:100%;padding:10px 12px;border:1px solid var(--b);border-radius:6px;background:var(--bg);color:var(--ink);font-size:13px;font-family:var(--font);margin-top:4px;cursor:pointer">
-              <option value="visualizador">Visualizador</option>
-              <option value="instalador">Instalador</option>
-              <option value="comercial">Comercial</option>
-              <option value="jefe_obra">Jefe de Obra</option>
-            </select>
-          </div>
-          <button onclick="doRegister()" id="btn-register" style="width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;font-family:var(--font)">Crear cuenta</button>
         </div>
         <div id="auth-error" style="display:none;margin-top:12px;padding:10px 12px;background:var(--red-lt);color:var(--red-m);border-radius:6px;font-size:12px;text-align:center"></div>
         <div id="auth-offline-msg" style="display:none;margin-top:16px;padding:12px;background:var(--blue-lt);border-radius:8px;font-size:11px;color:var(--ink2);text-align:center;border-left:3px solid var(--blue)">
@@ -8068,6 +8087,14 @@ function switchAuthTab(tab){
   document.getElementById('tab-register').style.background=tab==='register'?'var(--accent)':'transparent';
   document.getElementById('tab-register').style.color=tab==='register'?'#fff':'var(--ink2)';
   document.getElementById('auth-error').style.display='none';
+  // Resetear flujo de registro
+  if(tab==='register'){
+    document.getElementById('reg-step-1').style.display='block';
+    document.getElementById('reg-step-2').style.display='none';
+    document.getElementById('reg-step-3').style.display='none';
+    document.getElementById('reg-code').value='';
+    _regCode='';
+  }
 }
 
 async function doLogin(){
@@ -8093,15 +8120,80 @@ async function doLogin(){
   }
 }
 
+let _regEmail = '';
+let _regCode = '';
+
+async function doSendCode(){
+  const email=document.getElementById('reg-email').value.trim();
+  if(!email||!email.includes('@')){showAuthError('Introduce un email valido');return;}
+  _regEmail = email;
+  document.getElementById('btn-send-code').textContent='Enviando...';document.getElementById('btn-send-code').disabled=true;
+  showAuthError('');
+  try{
+    const r=await fetch('/api/auth/send-code',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email})
+    });
+    const data=await r.json();
+    if(r.ok){
+      // Mostrar paso 2
+      document.getElementById('reg-step-1').style.display='none';
+      document.getElementById('reg-step-2').style.display='block';
+      document.getElementById('reg-email-display').textContent=email;
+      toast('Codigo enviado. Revisa tu correo.');
+      // En modo desarrollo, mostrar codigo
+      if(data.devCode){
+        console.log('[Dev] Codigo:', data.devCode);
+        setTimeout(()=>toast('Codigo dev: '+data.devCode), 2000);
+      }
+    }else{
+      showAuthError(data.error||'Error enviando codigo');
+    }
+  }catch(e){
+    showAuthError('Error de red: '+e.message);
+  }
+  document.getElementById('btn-send-code').textContent='Enviar codigo';
+  document.getElementById('btn-send-code').disabled=false;
+}
+
+async function doVerifyCode(){
+  const code=document.getElementById('reg-code').value.trim();
+  if(!code||code.length!==6){showAuthError('Introduce el codigo de 6 digitos');return;}
+  _regCode = code;
+  document.getElementById('btn-verify-code').textContent='Verificando...';document.getElementById('btn-verify-code').disabled=true;
+  showAuthError('');
+  try{
+    const r=await fetch('/api/auth/verify-code',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:_regEmail,code})
+    });
+    const data=await r.json();
+    if(r.ok){
+      // Mostrar paso 3
+      document.getElementById('reg-step-2').style.display='none';
+      document.getElementById('reg-step-3').style.display='block';
+      toast('Codigo verificado. Completa tu registro.');
+    }else{
+      showAuthError(data.error||'Codigo incorrecto');
+    }
+  }catch(e){
+    showAuthError('Error de red: '+e.message);
+  }
+  document.getElementById('btn-verify-code').textContent='Verificar codigo';
+  document.getElementById('btn-verify-code').disabled=false;
+}
+
 async function doRegister(){
   const name=document.getElementById('reg-name').value.trim();
-  const email=document.getElementById('reg-email').value.trim();
   const password=document.getElementById('reg-password').value;
   const role=document.getElementById('reg-role').value;
-  if(!name||!email||!password){showAuthError('Completa todos los campos');return;}
+  if(!name||!password){showAuthError('Completa todos los campos');return;}
   if(password.length<6){showAuthError('Password minimo 6 caracteres');return;}
+  if(!_regCode){showAuthError('Error: no hay codigo verificado');return;}
   document.getElementById('btn-register').textContent='Creando...';document.getElementById('btn-register').disabled=true;
-  const result = await apiRegister(email, password, name, role);
+  const result = await apiRegister(_regEmail, password, name, role, _regCode);
   document.getElementById('btn-register').textContent='Crear cuenta';document.getElementById('btn-register').disabled=false;
   if(result.success){
     hideLoginScreen();
