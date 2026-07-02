@@ -1744,25 +1744,27 @@ input[type=range]{width:100%;accent-color:var(--blue);cursor:pointer;margin-bott
 <!-- MODAL: API KEY -->
 <div class="ov" id="mo-apikey"><div class="mo">
   <div class="mo-hdr">
-    <div class="mo-title">Configurar API key de Anthropic</div>
+    <div class="mo-title">⚙️ Configurar IA — Solo Administrador</div>
     <button class="mo-close" onclick="closeOv('mo-apikey')">✕</button>
   </div>
-  <div style="font-size:11px;color:var(--ink2);line-height:1.6;margin-bottom:12px;padding:10px 12px;background:var(--blue-lt);border-radius:6px;border-left:3px solid var(--blue)">
-    La API key se guarda <b>solo en memoria</b> durante esta sesión — nunca se almacena en disco ni se envía a ningún servidor excepto directamente a Anthropic. Al cerrar la pestaña desaparece.
+  <div style="font-size:11px;color:var(--ink2);line-height:1.6;margin-bottom:10px;padding:10px 12px;background:var(--red-lt);border-radius:6px;border-left:3px solid var(--red-m)">
+    <b>Acceso restringido.</b> Solo los administradores pueden ver o cambiar la API Key. La key se almacena cifrada en el servidor y nunca se muestra completa a ningun usuario.
   </div>
   <div class="fr">
-    <label style="font-size:10px;font-weight:700;color:var(--ink3)">Anthropic API Key</label>
+    <label style="font-size:10px;font-weight:700;color:var(--ink3)">Nueva API Key (Kimi/Moonshot)</label>
     <div class="api-key-wrap">
-      <input class="api-key-input" id="apikey-input" type="password" placeholder="sk-ant-api03-..." autocomplete="off" spellcheck="false">
+      <input class="api-key-input" id="apikey-input" type="password" placeholder="sk-xxxxxxxxxxxxxxxx..." autocomplete="off" spellcheck="false">
       <button class="api-key-eye" onclick="toggleApiKeyVisibility()" id="apikey-eye">👁</button>
     </div>
-    <div style="font-size:10px;color:var(--ink3);margin-top:5px">Backend de IA en <span style="color:var(--blue)">/api/ai</span> — proxy a Kimi/Moonshot</div>
+    <div id="apikey-hint" style="font-size:10px;color:var(--green);margin-top:5px;font-weight:600">Cargando...</div>
+    <div style="font-size:10px;color:var(--ink3);margin-top:3px">Obtén tu key en <a href="https://platform.moonshot.cn" target="_blank" style="color:var(--blue)">platform.moonshot.cn</a></div>
   </div>
   <div id="apikey-test-result" style="display:none;margin-top:8px;padding:8px 10px;border-radius:5px;font-size:11px"></div>
   <div class="mo-foot">
+    <button class="btn r" onclick="deleteApiKey()">🗑 Eliminar key</button>
     <button class="btn" onclick="closeOv('mo-apikey')">Cancelar</button>
-    <button class="btn" onclick="testApiKey()" id="apikey-test-btn">Verificar →</button>
-    <button class="btn p" onclick="saveApiKey()">Guardar y usar</button>
+    <button class="btn" onclick="testApiKey()" id="apikey-test-btn">Verificar conexion</button>
+    <button class="btn p" onclick="saveApiKey()">Guardar en servidor</button>
   </div>
 </div></div>
 
@@ -2515,8 +2517,11 @@ let _aiBackendAvailable = false;
 function getApiKey(){return '';} // Backend propio — no se necesita API key en cliente
 function hasApiKey(){return _aiBackendAvailable;}
 function openApiKey(){
+  // Solo admin puede acceder
+  if(!isAdmin()){toast('Solo los administradores pueden configurar la IA');return;}
   document.getElementById('apikey-input').value='';
   document.getElementById('apikey-test-result').style.display='none';
+  loadAIConfig(); // Carga hint de la key actual
   document.getElementById('mo-apikey').classList.add('open');
 }
 function toggleApiKeyVisibility(){
@@ -2525,12 +2530,60 @@ function toggleApiKeyVisibility(){
   inp.type=inp.type==='password'?'text':'password';
   eye.textContent=inp.type==='password'?'👁':'🙈';
 }
-function saveApiKey(){
-  updateApiBadge();
+// === GESTION DE API KEY (SOLO ADMIN) ===
+async function loadAIConfig(){
+  // Solo admin puede ver la config actual
+  try{
+    const r=await fetch('/api/admin/ai-config',{headers:getAuthHeaders()});
+    if(r.ok){
+      const data=await r.json();
+      _aiBackendAvailable=data.configured;
+      // Mostrar hint de la key activa (solo ultimos 4 chars)
+      const hintEl=document.getElementById('apikey-hint');
+      if(hintEl)hintEl.textContent=data.configured?'Key activa: '+data.keyHint:'Sin configurar';
+      updateApiBadge();
+      return data;
+    }
+  }catch(e){console.log('[AI] No se pudo cargar config:',e.message);}
+  // Fallback: probar conectividad
+  testApiKey();
+  return null;
+}
+async function saveApiKey(){
+  // Solo admin puede guardar
+  const val=document.getElementById('apikey-input').value.trim();
+  if(!val||val.length<20){toast('Introduce una API key valida (minimo 20 caracteres)');return;}
+  try{
+    const r=await fetch('/api/admin/ai-config',{
+      method:'POST',
+      headers:getAuthHeaders(),
+      body:JSON.stringify({apiKey:val})
+    });
+    const data=await r.json();
+    if(r.ok){
+      toast('API Key guardada en el servidor');
+      _aiBackendAvailable=true;
+      // Recargar hint
+      loadAIConfig();
+    }else{
+      toast(data.error||'Error guardando. ¿Eres administrador?');
+    }
+  }catch(e){toast('Error de red: '+e.message);}
   closeOv('mo-apikey');
-  toast('Backend de IA configurado');
+}
+async function deleteApiKey(){
+  if(!confirm('¿Eliminar la API Key del servidor? La IA dejara de funcionar.'))return;
+  try{
+    const r=await fetch('/api/admin/ai-config',{method:'DELETE',headers:getAuthHeaders()});
+    if(r.ok){
+      toast('API Key eliminada');
+      _aiBackendAvailable=false;
+      updateApiBadge();
+    }else{toast('Error. ¿Eres administrador?');}
+  }catch(e){toast('Error: '+e.message);}
 }
 async function testApiKey(){
+  // Prueba de conectividad: cualquier usuario puede probar si la IA responde
   const btn=document.getElementById('apikey-test-btn');
   const res_el=document.getElementById('apikey-test-result');
   btn.textContent='Verificando...';btn.disabled=true;
@@ -2542,17 +2595,17 @@ async function testApiKey(){
     });
     if(r.ok){
       res_el.style.display='block';res_el.style.background='var(--green-lt)';res_el.style.color='var(--green)';
-      res_el.textContent='✓ Backend AI conectado — Kimi/Moonshot responde';
+      res_el.textContent='✓ IA conectada y respondiendo';
       _aiBackendAvailable=true;updateApiBadge();
     }else{
       const err=await r.json().catch(()=>({}));
       res_el.style.display='block';res_el.style.background='var(--red-lt)';res_el.style.color='var(--red-m)';
-      res_el.textContent='⚠ Error '+r.status+': '+(err.error?.message||err.message||'Error de conexión');
+      res_el.textContent='⚠ '+ (err.error||err.message||'La IA no responde. Contacta al administrador.');
       _aiBackendAvailable=false;
     }
   }catch(e){
     res_el.style.display='block';res_el.style.background='var(--red-lt)';res_el.style.color='var(--red-m)';
-    res_el.textContent='⚠ Error de red: '+e.message+'. Comprueba que el backend está disponible.';
+    res_el.textContent='⚠ Sin conexion con el servidor.';
     _aiBackendAvailable=false;
   }
   btn.textContent='Verificar →';btn.disabled=false;
@@ -7786,6 +7839,12 @@ function logout(){
   localStorage.removeItem('buildos_token');
   showLoginScreen();
   toast('Sesion cerrada');
+}
+function isAdmin(){
+  return _currentUser && _currentUser.role === 'admin';
+}
+function getCurrentUserRole(){
+  return _currentUser?.role || 'visualizador';
 }
 
 // ===== LOGIN/REGISTER UI =====

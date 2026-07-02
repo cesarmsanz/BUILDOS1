@@ -195,6 +195,11 @@ try {
       details TEXT,
       created_at INTEGER DEFAULT (unixepoch())
     );
+    CREATE TABLE IF NOT EXISTS app_config (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at INTEGER DEFAULT (unixepoch())
+    );
   `);
 
   // Crear admin si no existe
@@ -421,20 +426,93 @@ async function handleProjectsUpdate(req, res, projectId) {
   } catch (err) { send(res, 500, { error: err.message }); }
 }
 
+// ============ CONFIGURACION IA (SOLO ADMIN) ============
+function getAIKeyFromDb() {
+  if (useJsonFallback) {
+    const cfg = jsonDb.config?.find(c => c.key === 'ai_key');
+    return cfg?.value || '';
+  }
+  try {
+    const row = db.prepare("SELECT value FROM app_config WHERE key = 'ai_key'").get();
+    return row?.value || '';
+  } catch { return ''; }
+}
+function setAIKeyInDb(key) {
+  if (useJsonFallback) {
+    if (!jsonDb.config) jsonDb.config = [];
+    const idx = jsonDb.config.findIndex(c => c.key === 'ai_key');
+    if (idx >= 0) jsonDb.config[idx] = { key: 'ai_key', value: key, updated_at: Date.now() };
+    else jsonDb.config.push({ key: 'ai_key', value: key, updated_at: Date.now() });
+    saveJsonDb();
+    return;
+  }
+  db.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('ai_key', ?, unixepoch())").run(key);
+}
+
+async function handleGetAIConfig(req, res) {
+  const user = requireAuth(req, res, 'admin');
+  if (!user) return;
+  const dbKey = getAIKeyFromDb();
+  const envKey = CONFIG.KIMI_API_KEY || '';
+  const activeKey = dbKey || envKey;
+  send(res, 200, {
+    configured: activeKey.length > 20,
+    source: dbKey ? 'database' : (envKey ? 'environment' : 'none'),
+    // NUNCA enviamos la key completa al frontend, solo los ultimos 4 caracteres
+    keyHint: activeKey ? '...' + activeKey.slice(-4) : '',
+    model: 'moonshot-v1-32k'
+  });
+}
+async function handleSetAIConfig(req, res) {
+  const user = requireAuth(req, res, 'admin');
+  if (!user) return;
+  const { apiKey } = await parseBody(req);
+  if (!apiKey || apiKey.length < 20) {
+    return send(res, 400, { error: 'API Key invalida. Debe tener al menos 20 caracteres.' });
+  }
+  setAIKeyInDb(apiKey);
+  // Log de auditoria
+  logActivity(user.id, null, 'ai_config_updated', { by: user.email });
+  send(res, 200, { success: true, message: 'API Key guardada correctamente' });
+}
+async function handleDeleteAIConfig(req, res) {
+  const user = requireAuth(req, res, 'admin');
+  if (!user) return;
+  setAIKeyInDb('');
+  logActivity(user.id, null, 'ai_config_deleted', { by: user.email });
+  send(res, 200, { success: true, message: 'API Key eliminada' });
+}
+function logActivity(userId, projectId, action, details) {
+  try {
+    if (useJsonFallback) {
+      jsonDb.activityLog = jsonDb.activityLog || [];
+      jsonDb.activityLog.push({ id: jsonDb.activityLog.length + 1, user_id: userId, project_id: projectId, action, details: JSON.stringify(details), created_at: Date.now() });
+      saveJsonDb();
+    } else {
+      db.prepare("INSERT INTO activity_log (user_id, project_id, action, details) VALUES (?, ?, ?, ?)").run(userId, projectId, action, JSON.stringify(details));
+    }
+  } catch (e) { console.error('[ActivityLog]', e); }
+}
+
 // ============ API: AI PROXY ============
 async function handleAIProxy(req, res) {
   const user = requireAuth(req, res);
   if (!user) return;
   const body = await parseBody(req);
 
+  // Leer key: base de datos primero, luego variable de entorno
+  const dbKey = getAIKeyFromDb();
+  const envKey = CONFIG.KIMI_API_KEY || '';
+  const activeKey = dbKey || envKey;
+
   // Usar Kimi si hay API key
-  if (CONFIG.KIMI_API_KEY) {
+  if (activeKey) {
     try {
       const response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${CONFIG.KIMI_API_KEY}`,
+          'Authorization': `Bearer ${activeKey}`,
         },
         body: JSON.stringify(body),
       });
@@ -606,10 +684,55 @@ async function handleSendMessage(req, res) {
 }
 
 // ============ FRONTEND SERVING ============
-function serveFrontend(res, pathname) {
-  const publicDir = path.join(__dirname, 'public');
-  let filePath;
+function findPublicDir() {
+  // Buscar index.html en varias ubicaciones posibles
+  // 1. Carpeta public/ (estructura normal)
+  // 2. Raiz del proyecto (para subidas simples a GitHub)
+  const candidates = [
+    path.join(__dirname, 'public'),
+    path.join(process.cwd(), 'public'),
+    path.join(__dirname, '..', 'public'),
+    '/app/public',
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(dir) && fs.existsSync(path.join(dir, 'index.html'))) {
+      console.log('[Static] Serving from:', dir);
+      return dir;
+    }
+  }
+  // Si no hay carpeta public/, buscar index.html en la raiz
+  if (fs.existsSync(path.join(__dirname, 'index.html'))) {
+    console.log('[Static] Serving from root:', __dirname);
+    return __dirname;
+  }
+  if (fs.existsSync(path.join(process.cwd(), 'index.html'))) {
+    console.log('[Static] Serving from cwd:', process.cwd());
+    return process.cwd();
+  }
+  console.warn('[Static] No index.html found');
+  return null;
+}
 
+function serveFrontend(res, pathname) {
+  const publicDir = findPublicDir();
+
+  if (!publicDir) {
+    // Fallback: devolver HTML inline basico
+    const fallbackHtml = `<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><title>BuildOS</title>
+<style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f3f1ec}
+.box{text-align:center;padding:40px;background:#fff;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.1);max-width:500px}
+h1{color:#c92a2a;margin-bottom:10px}p{color:#666;line-height:1.5}</style></head>
+<body><div class="box"><h1>⚠️ Frontend no encontrado</h1>
+<p>El servidor funciona correctamente, pero no encuentra los archivos del frontend.</p>
+<p><strong>Para arreglarlo:</strong> Asegurate de que la carpeta <code>public/</code> con <code>index.html</code> existe junto a <code>server.js</code>.</p>
+<p>Si usas Railway, comprueba que <code>public/index.html</code> esta en tu repositorio de GitHub.</p>
+</div></body></html>`;
+    res.writeHead(200, { 'Content-Type': 'text/html', 'Access-Control-Allow-Origin': '*' });
+    return res.end(fallbackHtml);
+  }
+
+  let filePath;
   if (pathname === '/' || pathname === '/index.html') {
     filePath = path.join(publicDir, 'index.html');
     return sendFile(res, filePath, 'text/html');
@@ -628,7 +751,6 @@ function serveFrontend(res, pathname) {
   if (fs.existsSync(filePath)) {
     sendFile(res, filePath, mimeTypes[ext] || 'application/octet-stream');
   } else {
-    // SPA fallback
     sendFile(res, path.join(publicDir, 'index.html'), 'text/html');
   }
 }
@@ -645,6 +767,9 @@ const routes = [
   { method: 'GET', pattern: /^\/api\/projects\/(\d+)$/, handler: handleProjectsGet },
   { method: 'PUT', pattern: /^\/api\/projects\/(\d+)$/, handler: handleProjectsUpdate },
   { method: 'POST', path: '/api/ai', handler: handleAIProxy },
+  { method: 'GET', path: '/api/admin/ai-config', handler: handleGetAIConfig },
+  { method: 'POST', path: '/api/admin/ai-config', handler: handleSetAIConfig },
+  { method: 'DELETE', path: '/api/admin/ai-config', handler: handleDeleteAIConfig },
   { method: 'POST', path: '/api/whatsapp/webhook', handler: handleWhatsAppWebhook },
   { method: 'GET', path: '/api/messages', handler: handleMessagesList },
   { method: 'GET', path: '/api/messages/phones', handler: handleContactsList },
