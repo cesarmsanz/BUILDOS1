@@ -449,18 +449,14 @@ function setAIKeyInDb(key) {
   db.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('ai_key', ?, unixepoch())").run(key);
 }
 
-// Verificar si es admin: por token JWT o por contrasena de entorno
-function isAdminRequest(req) {
-  // Metodo 1: Token JWT normal
-  const user = authMiddleware(req);
-  if (user && user.role === 'admin') return { ok: true, user };
-  // Metodo 2: Contrasena de admin en body (para primera configuracion)
-  return { ok: false, user: null };
+// Verificar contrasena de admin (simple, para proteger la config de IA)
+function checkAdminPassword(body) {
+  const pwd = body?.adminPassword || '';
+  return pwd === CONFIG.ADMIN_PASSWORD;
 }
 
 async function handleGetAIConfig(req, res) {
-  const auth = isAdminRequest(req);
-  // Permitir ver estado de IA sin autenticacion (solo si esta configurada)
+  // Ver estado de IA - no requiere auth
   const dbKey = getAIKeyFromDb();
   const envKey = CONFIG.KIMI_API_KEY || '';
   const activeKey = dbKey || envKey;
@@ -468,40 +464,30 @@ async function handleGetAIConfig(req, res) {
     configured: activeKey.length > 20,
     source: dbKey ? 'database' : (envKey ? 'environment' : 'none'),
     keyHint: activeKey ? '...' + activeKey.slice(-4) : '',
-    model: 'moonshot-v1-32k',
-    requiresAuth: !auth.ok
+    model: 'moonshot-v1-32k'
   });
 }
 async function handleSetAIConfig(req, res) {
-  const auth = isAdminRequest(req);
   const body = await parseBody(req);
   
-  // Si no hay autenticacion JWT, verificar contrasena de admin
-  if (!auth.ok) {
-    const { adminPassword } = body;
-    if (!adminPassword || adminPassword !== CONFIG.ADMIN_PASSWORD) {
-      return send(res, 401, { error: 'No autenticado. Introduce la contrasena de administrador.' });
-    }
+  // Verificar contrasena de admin
+  if (!checkAdminPassword(body)) {
+    return send(res, 401, { error: 'Contrasena incorrecta.' });
   }
   
   const { apiKey } = body;
   if (!apiKey || apiKey.length < 20) {
-    return send(res, 400, { error: 'API Key invalida. Debe tener al menos 20 caracteres.' });
+    return send(res, 400, { error: 'API Key invalida.' });
   }
   setAIKeyInDb(apiKey);
-  logActivity(auth.user?.id || 1, null, 'ai_config_updated', { by: auth.user?.email || 'setup' });
-  send(res, 200, { success: true, message: 'API Key guardada correctamente' });
+  send(res, 200, { success: true, message: 'API Key guardada' });
 }
 async function handleDeleteAIConfig(req, res) {
-  const auth = isAdminRequest(req);
-  if (!auth.ok) {
-    const body = await parseBody(req).catch(() => ({}));
-    if (!body.adminPassword || body.adminPassword !== CONFIG.ADMIN_PASSWORD) {
-      return send(res, 401, { error: 'No autenticado.' });
-    }
+  const body = await parseBody(req).catch(() => ({}));
+  if (!checkAdminPassword(body)) {
+    return send(res, 401, { error: 'Contrasena incorrecta.' });
   }
   setAIKeyInDb('');
-  logActivity(auth.user?.id || 1, null, 'ai_config_deleted', { by: auth.user?.email || 'setup' });
   send(res, 200, { success: true, message: 'API Key eliminada' });
 }
 function logActivity(userId, projectId, action, details) {
@@ -518,8 +504,7 @@ function logActivity(userId, projectId, action, details) {
 
 // ============ API: AI PROXY ============
 async function handleAIProxy(req, res) {
-  const user = requireAuth(req, res);
-  if (!user) return;
+  // La IA NO requiere autenticacion - funciona para todos
   const body = await parseBody(req);
 
   // Leer key: base de datos primero, luego variable de entorno
