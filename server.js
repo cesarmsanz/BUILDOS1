@@ -376,13 +376,15 @@ async function handleAuthSendCode(req, res) {
   if (result.success) {
     send(res, 200, { success: true, message: 'Codigo enviado. Revisa tu correo.' });
   } else {
-    // Modo desarrollo: mostrar codigo en respuesta si no hay Resend configurado
-    if (!CONFIG.RESEND_API_KEY) {
-      console.log('[Dev] Codigo para', email, ':', code);
-      send(res, 200, { success: true, message: 'Modo desarrollo: codigo generado', devCode: code });
-    } else {
-      send(res, 500, { error: 'Error enviando email. Intentalo mas tarde.' });
-    }
+    // Fallback: si el email falla (Resend bloqueado, sin credito, etc.), 
+    // mostrar el codigo para que el usuario pueda seguir registrandose
+    console.log('[Email] Fallo envio a', email, '- Motivo:', result.error);
+    console.log('[Email] Codigo de fallback:', code);
+    send(res, 200, { 
+      success: true, 
+      message: 'Servicio de email temporalmente indisponible. Usa el codigo mostrado.',
+      devCode: code 
+    });
   }
 }
 
