@@ -26,6 +26,8 @@ const CONFIG = {
   ADMIN_NAME: process.env.ADMIN_NAME || 'Administrador',
   DATABASE_PATH: process.env.DATABASE_PATH || './data/buildos.db',
   DATA_DIR: path.join(__dirname, 'data'),
+  RESEND_API_KEY: process.env.RESEND_API_KEY || '',
+  EMAIL_FROM: process.env.EMAIL_FROM || 'BuildOS <onboarding@resend.dev>',
 };
 
 // Asegurar directorio de datos
@@ -200,6 +202,14 @@ try {
       value TEXT NOT NULL,
       updated_at INTEGER DEFAULT (unixepoch())
     );
+    CREATE TABLE IF NOT EXISTS verification_codes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL,
+      code TEXT NOT NULL,
+      verified INTEGER DEFAULT 0,
+      expires_at INTEGER NOT NULL,
+      created_at INTEGER DEFAULT (unixepoch())
+    );
   `);
 
   // Crear admin si no existe
@@ -251,10 +261,150 @@ function requireAuth(req, res, minRole = null) {
   return user;
 }
 
+// ============ EMAIL (Resend API) ============
+async function sendEmailViaResend(to, subject, htmlBody) {
+  if (!CONFIG.RESEND_API_KEY) {
+    console.warn('[Email] RESEND_API_KEY no configurada');
+    return { success: false, error: 'Servicio de email no configurado' };
+  }
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${CONFIG.RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: CONFIG.EMAIL_FROM,
+        to: [to],
+        subject: subject,
+        html: htmlBody,
+      }),
+    });
+    const data = await response.json();
+    if (response.ok) {
+      console.log('[Email] Enviado a', to, '- ID:', data.id);
+      return { success: true, id: data.id };
+    } else {
+      console.error('[Email] Error:', data);
+      return { success: false, error: data.message || 'Error enviando email' };
+    }
+  } catch (err) {
+    console.error('[Email] Error de red:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+function generateVerificationCode() {
+  // 6 digitos numericos
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+async function saveVerificationCode(email, code) {
+  const expiresAt = Math.floor(Date.now() / 1000) + (10 * 60); // 10 minutos
+  if (useJsonFallback) {
+    if (!jsonDb.verificationCodes) jsonDb.verificationCodes = [];
+    // Invalidar codigos anteriores
+    jsonDb.verificationCodes = jsonDb.verificationCodes.filter(c => c.email !== email);
+    jsonDb.verificationCodes.push({ email, code, verified: 0, expires_at: expiresAt, created_at: Date.now() });
+    saveJsonDb();
+  } else {
+    // Eliminar codigos anteriores del mismo email
+    db.prepare('DELETE FROM verification_codes WHERE email = ?').run(email);
+    db.prepare('INSERT INTO verification_codes (email, code, expires_at) VALUES (?, ?, ?)').run(email, code, expiresAt);
+  }
+}
+
+async function verifyCode(email, code) {
+  if (useJsonFallback) {
+    if (!jsonDb.verificationCodes) return { valid: false, error: 'Codigo no encontrado' };
+    const record = jsonDb.verificationCodes.find(c => c.email === email && c.code === code);
+    if (!record) return { valid: false, error: 'Codigo incorrecto' };
+    if (record.verified) return { valid: false, error: 'Codigo ya usado' };
+    const now = Math.floor(Date.now() / 1000);
+    if (record.expires_at < now) return { valid: false, error: 'Codigo expirado' };
+    // Marcar como verificado
+    record.verified = 1;
+    saveJsonDb();
+    return { valid: true };
+  } else {
+    const record = db.prepare('SELECT * FROM verification_codes WHERE email = ? AND code = ?').get(email, code);
+    if (!record) return { valid: false, error: 'Codigo incorrecto' };
+    if (record.verified) return { valid: false, error: 'Codigo ya usado' };
+    const now = Math.floor(Date.now() / 1000);
+    if (record.expires_at < now) return { valid: false, error: 'Codigo expirado' };
+    // Marcar como verificado
+    db.prepare('UPDATE verification_codes SET verified = 1 WHERE id = ?').run(record.id);
+    return { valid: true };
+  }
+}
+
 // ============ API: AUTH ============
+async function handleAuthSendCode(req, res) {
+  const { email } = await parseBody(req);
+  if (!email || !email.includes('@')) return send(res, 400, { error: 'Email invalido' });
+
+  // Verificar que el email no esta ya registrado
+  let exists = false;
+  if (useJsonFallback) {
+    exists = jsonDb.users.some(u => u.email === email);
+  } else {
+    exists = !!db.prepare('SELECT 1 FROM users WHERE email = ?').get(email);
+  }
+  if (exists) return send(res, 409, { error: 'Este email ya esta registrado. Inicia sesion.' });
+
+  // Generar y guardar codigo
+  const code = generateVerificationCode();
+  await saveVerificationCode(email, code);
+
+  // Enviar email
+  const result = await sendEmailViaResend(
+    email,
+    'Codigo de verificacion - BuildOS',
+    `<div style="font-family:system-ui,sans-serif;max-width:500px;margin:0 auto;padding:30px;background:#f8f8f6;border-radius:12px">
+      <h2 style="color:#1a1917;margin-bottom:8px">BuildOS</h2>
+      <p style="color:#666;font-size:14px">Hola,</p>
+      <p style="color:#666;font-size:14px">Tu codigo de verificacion para registrarte en BuildOS es:</p>
+      <div style="text-align:center;padding:20px;background:#fff;border-radius:8px;margin:20px 0;border:2px solid #F0A020">
+        <span style="font-size:36px;font-weight:700;letter-spacing:8px;color:#1a1917">${code}</span>
+      </div>
+      <p style="color:#666;font-size:13px">Este codigo expira en 10 minutos.</p>
+      <p style="color:#999;font-size:12px;margin-top:20px">Si no solicitaste este codigo, ignora este email.</p>
+    </div>`
+  );
+
+  if (result.success) {
+    send(res, 200, { success: true, message: 'Codigo enviado. Revisa tu correo.' });
+  } else {
+    // Modo desarrollo: mostrar codigo en respuesta si no hay Resend configurado
+    if (!CONFIG.RESEND_API_KEY) {
+      console.log('[Dev] Codigo para', email, ':', code);
+      send(res, 200, { success: true, message: 'Modo desarrollo: codigo generado', devCode: code });
+    } else {
+      send(res, 500, { error: 'Error enviando email. Intentalo mas tarde.' });
+    }
+  }
+}
+
+async function handleAuthVerifyCode(req, res) {
+  const { email, code } = await parseBody(req);
+  if (!email || !code) return send(res, 400, { error: 'Faltan campos' });
+
+  const result = await verifyCode(email, code);
+  if (result.valid) {
+    send(res, 200, { success: true, message: 'Codigo verificado', email });
+  } else {
+    send(res, 400, { error: result.error || 'Codigo invalido' });
+  }
+}
+
 async function handleAuthRegister(req, res) {
-  const { email, password, name, role = 'visualizador' } = await parseBody(req);
-  if (!email || !password || !name) return send(res, 400, { error: 'Faltan campos' });
+  const { email, password, name, role = 'visualizador', code } = await parseBody(req);
+  if (!email || !password || !name || !code) return send(res, 400, { error: 'Faltan campos' });
+
+  // Verificar que el codigo fue validado
+  const codeResult = await verifyCode(email, code);
+  if (!codeResult.valid) return send(res, 400, { error: 'Codigo no verificado. Solicita uno nuevo.' });
 
   try {
     if (useJsonFallback) {
@@ -764,6 +914,8 @@ h1{color:#c92a2a;margin-bottom:10px}p{color:#666;line-height:1.5}</style></head>
 
 // ============ ROUTER ============
 const routes = [
+  { method: 'POST', path: '/api/auth/send-code', handler: handleAuthSendCode },
+  { method: 'POST', path: '/api/auth/verify-code', handler: handleAuthVerifyCode },
   { method: 'POST', path: '/api/auth/register', handler: handleAuthRegister },
   { method: 'POST', path: '/api/auth/login', handler: handleAuthLogin },
   { method: 'GET', path: '/api/auth/me', handler: handleAuthMe },
