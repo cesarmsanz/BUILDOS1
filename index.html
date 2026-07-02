@@ -7893,7 +7893,7 @@ function afterAuthLoad(){
 
 // ===== BACKEND AUTH SYSTEM =====
 let _backendAvailable = false;
-let _authToken = localStorage.getItem('buildos_token') || '';
+let _authToken = sessionStorage.getItem('buildos_token') || '';
 let _currentUser = null;
 
 async function checkBackend(){
@@ -7924,7 +7924,7 @@ async function apiLogin(email, password){
   if(r.ok && data.token){
     _authToken = data.token;
     _currentUser = data.user;
-    localStorage.setItem('buildos_token', _authToken);
+    sessionStorage.setItem('buildos_token', _authToken);
     return {success: true, user: data.user};
   }
   return {success: false, error: data.error || 'Error de login'};
@@ -7939,7 +7939,7 @@ async function apiRegister(email, password, name, role, code){
   if(r.ok && data.token){
     _authToken = data.token;
     _currentUser = data.user;
-    localStorage.setItem('buildos_token', _authToken);
+    sessionStorage.setItem('buildos_token', _authToken);
     return {success: true, user: data.user};
   }
   return {success: false, error: data.error || 'Error de registro'};
@@ -7976,7 +7976,7 @@ async function apiUpdateRole(userId, role){
 function logout(){
   _authToken = '';
   _currentUser = null;
-  localStorage.removeItem('buildos_token');
+  sessionStorage.removeItem('buildos_token');
   showLoginScreen();
   toast('Sesion cerrada');
 }
