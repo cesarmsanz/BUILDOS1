@@ -2530,19 +2530,15 @@ function toggleApiKeyVisibility(){
   eye.textContent=inp.type==='password'?'👁':'🙈';
 }
 // === GESTION DE API KEY ===
-// Obtener contrasena de admin para configuracion sin token
-function getAdminPasswordForSetup(){
-  // Si estamos logueados como admin, no necesitamos contrasena
-  if(isAdmin())return null;
-  // Si no estamos logueados, pedir contrasena
-  const pwd=prompt('Introduce la contrasena de administrador para configurar la IA:');
-  return pwd;
+// Pedir contrasena de admin
+function getAdminPassword(){
+  const pwd=prompt('Introduce tu contrasena de administrador:');
+  return pwd||'';
 }
 
 async function loadAIConfig(){
-  // Cualquiera puede ver el estado de la IA
   try{
-    const r=await fetch('/api/admin/ai-config',{headers:getAuthHeaders()});
+    const r=await fetch('/api/admin/ai-config');
     if(r.ok){
       const data=await r.json();
       _aiBackendAvailable=data.configured;
@@ -2558,9 +2554,8 @@ async function saveApiKey(){
   const val=document.getElementById('apikey-input').value.trim();
   if(!val||val.length<20){toast('Introduce una API key valida (minimo 20 caracteres)');return;}
   
-  // Si no es admin, pedir contrasena
-  const adminPwd=!isAdmin()?getAdminPasswordForSetup():null;
-  if(!isAdmin()&&!adminPwd){toast('Configuracion cancelada');return;}
+  const adminPwd=getAdminPassword();
+  if(!adminPwd){toast('Contrasena requerida');return;}
   
   try{
     const r=await fetch('/api/admin/ai-config',{
@@ -2570,20 +2565,20 @@ async function saveApiKey(){
     });
     const data=await r.json();
     if(r.ok){
-      toast('API Key guardada correctamente');
+      toast('API Key guardada');
       _aiBackendAvailable=true;
       loadAIConfig();
     }else{
-      toast(data.error||'Error. ¿Contrasena correcta?');
+      toast(data.error||'Error');
     }
   }catch(e){toast('Error de red: '+e.message);}
   closeOv('mo-apikey');
 }
 async function deleteApiKey(){
-  if(!confirm('¿Eliminar la API Key? La IA dejara de funcionar.'))return;
+  if(!confirm('¿Eliminar la API Key?'))return;
   
-  const adminPwd=!isAdmin()?getAdminPasswordForSetup():null;
-  if(!isAdmin()&&!adminPwd)return;
+  const adminPwd=getAdminPassword();
+  if(!adminPwd)return;
   
   try{
     const r=await fetch('/api/admin/ai-config',{
@@ -2595,7 +2590,7 @@ async function deleteApiKey(){
       toast('API Key eliminada');
       _aiBackendAvailable=false;
       updateApiBadge();
-    }else{toast('Error al eliminar');}
+    }else{toast('Error');}
   }catch(e){toast('Error: '+e.message);}
 }
 async function testApiKey(){
