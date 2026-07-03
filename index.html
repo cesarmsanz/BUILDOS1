@@ -158,7 +158,7 @@ html,body{height:100%;background:var(--nav);font-family:var(--sans);font-size:13
 .ppchip{display:inline-block;padding:4px 9px;border:1.5px solid var(--border);border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;margin:2px;color:var(--ink2);transition:all .1s}
 .ppchip:hover{border-color:var(--blue);color:var(--blue)}.ppchip.on{background:var(--blue);color:#fff;border-color:var(--blue)}
 #content{flex:1;overflow:hidden;display:flex;min-height:0}
-.tp{flex:1;overflow-y:auto;display:none;padding:14px}.tp.act{display:block}
+.tp{flex:1;overflow-y:auto;display:none;padding:14px;opacity:0;transition:opacity .2s ease}.tp.act{display:block;opacity:1;animation:tabFadeIn .25s ease}@keyframes tabFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 /* PLAN */
 .plan-toolbar{display:flex;align-items:center;gap:6px;padding:7px 10px;background:var(--white);border:1px solid var(--border);border-radius:var(--r);margin-bottom:10px;flex-wrap:wrap}
 /* NEW PLAN SYSTEM */
@@ -207,10 +207,7 @@ html,body{height:100%;background:var(--nav);font-family:var(--sans);font-size:13
 .pdf-page-num{position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:8px;font-weight:800;color:#fff;background:rgba(0,0,0,.45);padding:1px 0}
 .pdf-load-msg{font-size:11px;color:var(--ink3);padding:4px 0;flex-shrink:0}
 .ptool{display:flex;align-items:center;gap:4px;padding:4px 9px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--ink2);font-size:11px;font-weight:700;cursor:pointer;transition:all .1s;user-select:none}
-.ptool:hover{border-color:var(--blue);color:var(--blue)}.ptool.act{background:var(--blue);color:#fff;border-color:var(--blue)}
-.pt-sep{width:1px;height:18px;background:var(--border)}
-.plan-area{display:flex;gap:10px}
-.plan-wrap{flex:1;background:var(--white);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;position:relative;min-height:380px;display:flex;align-items:center;justify-content:center}
+.ptool:hover{border-color:var(--blue);color:var(--blue)}.ptool.act{background:var(--blue);c solid var(--border);border-radius:var(--r);overflow:hidden;position:relative;min-height:380px;display:flex;align-items:center;justify-content:center}
 .plan-drop{display:flex;flex-direction:column;align-items:center;gap:8px;padding:30px;text-align:center;cursor:pointer;border:2px dashed var(--border2);border-radius:10px;margin:20px;transition:all .15s}
 .plan-drop:hover{border-color:var(--blue);background:var(--blue-lt)}
 #plan-canvas{display:none;max-width:100%;max-height:100%}
@@ -738,6 +735,10 @@ body.dark-mode .wa-input{background:#2c2824;border-color:#3a3530}
 body.dark-mode .plan-toolbar{background:#252320}
 body.dark-mode .canvas-container{background:#1a1917}
 body.dark-mode .zones-panel{background:#252320;border-color:#3a3530}
+/* Dashboard dark mode */
+.dark-mode #tp-dashboard .tp{background:var(--nav)}
+.dark-mode #dash-kpi-row > div{background:var(--nav2)!important;border-color:var(--nav3)!important}
+.dark-mode #dash-budget-chart{background:transparent}
 
 /* Dark mode toggle button */
 .dark-toggle{
@@ -801,7 +802,8 @@ body.dark-mode .zones-panel{background:#252320;border-color:#3a3530}
     <div class="hdr-addr" id="hdr-addr" onclick="openEditProj()">— · editar ✎</div></div>
     <div class="hdr-sep"></div>
     <div class="tabs-strip">
-      <button class="tb act" onclick="switchTab('plan')">Plano</button>
+      <button class="tb act" onclick="switchTab('dashboard')" id="tb-dashboard">📊 Dashboard</button>
+      <button class="tb" onclick="switchTab('plan')">Plano</button>
       <button class="tb" onclick="switchTab('budget')">Presupuesto</button>
       <button class="tb" onclick="switchTab('catalog')">Catálogos</button>
       <button class="tb" onclick="switchTab('analysis')">Análisis</button>
@@ -833,7 +835,7 @@ body.dark-mode .zones-panel{background:#252320;border-color:#3a3530}
   </header>
   <div id="content">
     <!-- PLAN -->
-    <div class="tp act" id="tp-plan">
+    <div class="tp" id="tp-plan">
       <!-- Toolbar -->
       <div class="plan-toolbar">
         <button class="ptool act" id="tool-select" onclick="setTool('select')">↖ Seleccionar</button>
@@ -904,6 +906,58 @@ body.dark-mode .zones-panel{background:#252320;border-color:#3a3530}
           <div id="rooms-summary-box" style="display:none;background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px">
             <div style="font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin-bottom:7px">Resumen de obra</div>
             <div id="rooms-summary"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- DASHBOARD -->
+    <div class="tp act" id="tp-dashboard">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <span style="font-size:13px;font-weight:800;letter-spacing:-.02em;color:var(--ink);flex:1" id="dash-title">Panel de Control</span>
+        <span style="font-size:11px;color:var(--ink3)" id="dash-last-update">Actualizado: ahora</span>
+        <button class="btn" onclick="refreshDashboard()" style="font-size:10px">⟳ Actualizar</button>
+      </div>
+      <!-- KPI Cards Row -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px" id="dash-kpi-row">
+        <!-- KPIs rendered by JS -->
+      </div>
+      <!-- Main dashboard content: 2 columns -->
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;align-items:start">
+        <!-- Left: Charts + Activity -->
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <!-- Budget by Group Chart -->
+          <div style="background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px">
+            <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin-bottom:10px">Presupuesto por grupo</div>
+            <div id="dash-budget-chart" style="min-height:160px"></div>
+          </div>
+          <!-- Recent Activity -->
+          <div style="background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px">
+            <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin-bottom:10px">Actividad reciente</div>
+            <div id="dash-activity" style="max-height:240px;overflow-y:auto"></div>
+          </div>
+        </div>
+        <!-- Right: Quick Actions + Status -->
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <!-- Quick Actions -->
+          <div style="background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px">
+            <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin-bottom:10px">Acciones rápidas</div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <button class="btn p" style="width:100%;font-size:11px" onclick="openSAD(null)">＋ Nueva partida</button>
+              <button class="btn g" style="width:100%;font-size:11px" onclick="openWizard()">📋 Nuevo proyecto</button>
+              <button class="btn" style="width:100%;font-size:11px" onclick="exportToPDF()">📄 Exportar PDF</button>
+              <button class="btn" style="width:100%;font-size:11px" onclick="switchTab('catalog')">📦 Ver catálogos</button>
+              <button class="btn" style="width:100%;font-size:11px;background:var(--purple-lt);color:var(--purple);border-color:var(--purple)" onclick="openTiers()">⬡ Paquetes</button>
+            </div>
+          </div>
+          <!-- Project Status -->
+          <div style="background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px">
+            <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin-bottom:10px">Estado del proyecto</div>
+            <div id="dash-status" style="font-size:11px;color:var(--ink2);line-height:1.8"></div>
+          </div>
+          <!-- AI Status -->
+          <div style="background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px">
+            <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin-bottom:10px">IA Configurada</div>
+            <div id="dash-ai-status" style="font-size:11px;color:var(--ink2)">Verificando...</div>
           </div>
         </div>
       </div>
@@ -3822,6 +3876,95 @@ function wzBuildResult(){
         <div style="font-size:9px;color:var(--ink3)">~${m2>0?Math.round(est/m2):0}€/m² · sin IVA</div>
       </div>
       <div style="background:var(--bg2);border-radius:var(--r);padding:10px 12px">
+        <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(-Tc.mat*tc+pavTc.mo:110);
+  total+=m2*0.5*6;// rodapié
+  // C11 — alicatado
+  const banAc={estandar:28,premium:58,micro:65,piedra:145}[WZ.bano_acabado||'estandar'];
+  total+=allBanos*(18+25)*banAc*tc;// suelo + paredes aprox
+  if(WZ.cocina_tipo!=='no')total+=8*(32*tc+35);// frente cocina
+  if((WZ.pintura_tipo||[]).includes('papel'))total+=(18+23)*2*tc*(dorms+1);
+  // C12 — pintura
+  const pintM2=m2*3.2;
+  const pintUnit=(WZ.pintura_tipo||[]).includes('cal')?16.95*tc:(WZ.pintura_tipo||[]).includes('stucco')?65*tc:9.2;
+  total+=pintM2*pintUnit;
+  total+=m2*pintUnit*0.85;// techos
+  total+=m2*1.2*6;// rodapié pintura
+  // C13 — carpintería
+  const puertaP={standard:200,enrasada:1600,corredera:350,mixto:900}[WZ.puertas_tipo||'enrasada'];
+  total+=puertas*(puertaP*tc+65);
+  if(WZ.armarios==='todos')total+=dorms*3*(90*tc);
+  else if(WZ.armarios==='principales')total+=2*3*(90*tc);
+  else if(WZ.armarios==='vestidor')total+=1*(90*3*tc*2);
+  // C15 — mamparas y espejos
+  total+=allBanos*(250*tc);
+  if((WZ.lujo||[]).includes('espejo_tv'))total+=2500*tc;
+  // C16 — sanitarios
+  const saniPrice={estandar:520,premium:780,micro:780,piedra:1200}[WZ.bano_acabado||'estandar'];
+  total+=allBanos*(saniPrice*tc+37);// inodoro+cisterna+m.o.
+  total+=banos*(380*tc+200);// duchas o bañera
+  if((WZ.lujo||[]).includes('bano_hidro'))total+=2400*tc+350;
+  if((WZ.lujo||[]).includes('inodoro_jap'))total+=780*tc+45;
+  // C17 — grifería
+  const grifP={estandar:285,premium:245,micro:580,piedra:580}[WZ.bano_acabado||'estandar'];
+  total+=allBanos*(grifP*tc+30);
+  // C18 — cocina
+  if(WZ.cocina_tipo!=='no'){
+    total+=(10000+(WZ.cocina_tipo==='abierta'?3000:0)+(WZ.cocina_tipo==='office'?4000:0))*tc;
+    total+=(1742+792+610+569+698+995)*tc;// electros Siemens base
+    if((WZ.lujo||[]).includes('cave_vinos'))total+=1326*tc;
+    total+=6000*tc;// piedra encimera
+  }
+  // C19 — iluminación
+  const ilumPts=m2/4.5;
+  const ilumP={focos:185,carril:220,mixto:200,disenador:350}[WZ.iluminacion||'focos'];
+  total+=ilumPts*(ilumP*tc+30);
+  total+=Math.ceil(ilumPts/8)*110;// LEDs armarios/cornisas
+  // C20 — herrajes
+  total+=puertas*37*tc;
+  if((WZ.lujo||[]).includes('smart_lock'))total+=puertas*(80+220)*tc;
+  // C21 — limpieza fin obra
+  total+=380+200;
+  // especiales
+  if((WZ.especiales||[]).includes('sauna'))total+=4000*tc;
+  if((WZ.especiales||[]).includes('gym'))total+=2000*tc;
+  if((WZ.lujo||[]).includes('molduras'))total+=m2*0.6*10+(50*29.54+136*7.52);// ORAC
+  if((WZ.lujo||[]).includes('chimenea'))total+=2500*tc;
+  // RCD gestión residuos
+  if(WZ.rcd==='si_plan')total+=m2*6.5;
+  else if(WZ.rcd==='contenedor')total+=m2*3;
+  // coordinador seguridad
+  if(WZ.coordinacion==='riverwalk')total+=m2*4;
+
+  return Math.round(total);
+}
+
+function wzBuildResult(){
+  const m2=wzM2();const est=computeEstimate(m2);
+  const pvp=est*(1+(parseFloat(document.getElementById('wz-m2')?.value)?20:20)/100);
+  const iva=parseInt(document.getElementById('wz-iva')?.value||21);
+  const budget=parseFloat(document.getElementById('wz-budget')?.value)||0;
+  const diff=budget>0?est-budget:null;
+
+  const tierLabel={estandar:'Estándar',premium:'Premium',signature:'Signature'}[WZ.tier||'estandar'];
+  const tierColor={estandar:'var(--blue)',premium:'var(--purple)',signature:'var(--amber)'}[WZ.tier||'estandar'];
+
+  // Build chapter estimates for display
+  const chaps=wzChapEstimates(m2);
+  const chapRows=chaps.filter(c=>c.val>0).map(c=>`
+    <div class="wz-r-row">
+      <div class="wz-r-name">${c.icon} ${c.name}</div>
+      <div class="wz-r-val">${fN(c.val)}</div>
+      <div class="wz-r-unit">${c.note||''}</div>
+    </div>`).join('');
+
+  document.getElementById('wz-result-content').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">
+      <div style="background:var(--bg2);border-radius:var(--r);padding:10px 12px">
+        <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--ink3)">Coste estimado</div>
+        <div style="font-size:22px;font-weight:800;font-family:var(--mono);color:var(--blue)">${fN(est)}</div>
+        <div style="font-size:9px;color:var(--ink3)">~${m2>0?Math.round(est/m2):0}€/m² · sin IVA</div>
+      </div>
+      <div style="background:var(--bg2);border-radius:var(--r);padding:10px 12px">
         <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--ink3)">Precio venta (+20%)</div>
         <div style="font-size:22px;font-weight:800;font-family:var(--mono);color:var(--ink)">${fN(Math.round(pvp))}</div>
         <div style="font-size:9px;color:var(--ink3)">+ IVA ${iva}% = ${fN(Math.round(pvp*(1+iva/100)))}</div>
@@ -6361,6 +6504,82 @@ function renderHdr(){
   const metalCol={por_definir:'var(--amber)',acero:'var(--ink3)',dorado:'#B8860B',negro:'var(--ink)',bronce:'#8B5A2B',cromo:'var(--ink3)'}[proj.metal||'por_definir'];
   document.getElementById('hdr-addr').innerHTML=`${proj.addr||'—'} · ${proj.m2||0}m² · <span style="color:${metalCol};font-weight:700">${metalLabel}</span> · <span style="color:var(--blue)">✎ editar</span>`;
 }
+// ===== DASHBOARD =====
+function renderDashboard(){
+  const el=document.getElementById('dash-kpi-row');
+  if(!el)return;
+  const proj=P();
+  if(!proj){el.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--ink3)">Selecciona un proyecto para ver el dashboard</div>';return;}
+  let totalParts=0,totalMat=0,totalMO=0,completeness=0;
+  (proj.chapters||[]).forEach(ch=>{
+    (ch.partidas||[]).forEach(p=>{
+      totalParts++;
+      totalMat+=(p.mat_price||0)*(p.qty||0);
+      totalMO+=(p.mo_price||0)*(p.qty||0);
+    });
+  });
+  const total=totalMat+totalMO;
+  completeness=totalParts>0?Math.min(100,Math.round(totalParts*0.8)):0;
+  const kpis=[
+    {label:'Presupuesto Total',value:'€'+fmt(total),color:'var(--blue)',bg:'var(--blue-lt)'},
+    {label:'Material',value:'€'+fmt(totalMat),color:'var(--green)',bg:'var(--green-lt)'},
+    {label:'Mano de Obra',value:'€'+fmt(totalMO),color:'var(--purple)',bg:'var(--purple-lt)'},
+    {label:'Partidas',value:totalParts,color:'var(--ink)',bg:'var(--bg2)'},
+    {label:'Completitud',value:completeness+'%',color:completeness>70?'var(--green)':'var(--amber)',bg:completeness>70?'var(--green-lt)':'var(--amber-lt)'},
+  ];
+  el.innerHTML=kpis.map(k=>`
+    <div style="background:${k.bg};border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;text-align:center;transition:transform .15s,box-shadow .15s" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 12px rgba(0,0,0,.08)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
+      <div style="font-size:20px;font-weight:800;font-family:var(--mono);color:${k.color};margin-bottom:3px">${k.value}</div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)">${k.label}</div>
+    </div>
+  `).join('');
+  const chartEl=document.getElementById('dash-budget-chart');
+  if(chartEl){
+    const groups={};
+    (proj.chapters||[]).forEach(ch=>{
+      const gName=ch.name||'General';
+      groups[gName]=(groups[gName]||0)+(ch.partidas||[]).reduce((s,p)=>s+((p.mat_price||0)+(p.mo_price||0))*(p.qty||1),0);
+    });
+    const maxVal=Math.max(...Object.values(groups),1);
+    const colors=['var(--blue)','var(--green)','var(--purple)','var(--amber)','var(--teal)','var(--red-m)','var(--ink2)'];
+    chartEl.innerHTML=Object.entries(groups).map(([name,val],i)=>{
+      const pct=(val/maxVal*100).toFixed(1);
+      return `<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px"><span style="font-weight:600">${name}</span><span style="font-family:var(--mono);font-weight:700;color:var(--blue)">€${fmt(val)}</span></div><div style="height:20px;background:var(--bg2);border-radius:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${colors[i%colors.length]};border-radius:4px;transition:width .5s ease"></div></div></div>`;
+    }).join('')||'<div style="text-align:center;color:var(--ink3);padding:20px">Sin datos de presupuesto</div>';
+  }
+  const statusEl=document.getElementById('dash-status');
+  if(statusEl){
+    statusEl.innerHTML=`
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Proyecto:</span><b>${proj.name}</b></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Dirección:</span><span>${proj.addr||'—'}</span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Estado:</span><span class="badge ${proj.status==='active'?'bg-':'bb'}">${proj.status||'draft'}</span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>m²:</span><span>${proj.m2||'—'}</span></div>
+    `;
+  }
+  const aiEl=document.getElementById('dash-ai-status');
+  if(aiEl){
+    const hasKey=document.getElementById('api-badge')?.classList.contains('ok');
+    aiEl.innerHTML=hasKey
+      ?'<span style="color:var(--green)">✓</span> IA activa y configurada'
+      :'<span style="color:var(--amber)">⚠</span> IA no configurada — <a href="#" onclick="openApiKey();return false" style="color:var(--blue)">Configurar</a>';
+  }
+  const actEl=document.getElementById('dash-activity');
+  if(actEl){
+    const activities=S.activityLog||[{action:'Proyecto iniciado',time:'Recientemente'}];
+    actEl.innerHTML=activities.slice(-10).reverse().map(a=>`
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+        <div style="width:6px;height:6px;border-radius:50%;background:var(--blue);flex-shrink:0"></div>
+        <div style="flex:1;font-size:11px">${a.action}</div>
+        <div style="font-size:9px;color:var(--ink3);font-family:var(--mono)">${a.time||''}</div>
+      </div>
+    `).join('')||'<div style="text-align:center;color:var(--ink3);padding:12px">Sin actividad reciente</div>';
+  }
+}
+function refreshDashboard(){
+  renderDashboard();
+  const el=document.getElementById('dash-last-update');
+  if(el)el.textContent='Actualizado: '+new Date().toLocaleTimeString('es-ES');
+}
 function renderBudget(){
   const proj=P();if(!proj)return;
   const np=proj.chapters.reduce((s,c)=>s+c.partidas.length,0);
@@ -6747,135 +6966,69 @@ function exportToFinanciero(){
 }
 // ===== EXPORT TO PDF =====
 async function exportToPDF(){
-  const proj=P();if(!proj){toast('Selecciona un proyecto');return;}
-  const {jsPDF}=window.jspdf;
-  if(!jsPDF){toast('Librería PDF no cargada. Revisa la conexión.');return;}
-  const doc=new jsPDF({orientation:'p',unit:'mm',format:'a4'});
-  const tot=projtot(proj);
-  const iva=proj.iva||21;
-  const pvp=tot*(1+S.mg/100);
-  const pvpIva=pvp*(1+iva/100);
-  const m2=proj.m2||0;
-  const pageW=doc.internal.pageSize.getWidth();
-  const margin=15;
-  let y=15;
-  // Helpers
-  const hex=(h)=>(h||'#000').replace('#','');
-  const txt=(t,x,y_,opts={})=>doc.text(t,x,y_,opts);
-  const rect=(x,y_,w,h,fill)=>{if(fill)doc.setFillColor(fill);doc.rect(x,y_,w,h,fill?'F':'S');};
-  const line=(x1,y1,x2,y2)=>{doc.line(x1,y1,x2,y2);};
-  // HEADER
-  doc.setFontSize(18);doc.setFont('helvetica','bold');doc.setTextColor(26,25,23);
-  txt('BUILDOS',margin,y);doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(136,132,128);
-  txt('Riverwalk Investments',margin+30,y);
-  y+=6;doc.setDrawColor(208,204,196);line(margin,y,pageW-margin,y);y+=4;
-  // Project info
-  doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(26,25,23);
-  txt(proj.name||'Proyecto sin nombre',margin,y);y+=5;
-  doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(74,72,69);
-  const fecha=new Date().toLocaleDateString('es-ES',{day:'2-digit',month:'long',year:'numeric'});
-  txt(`${proj.addr||'—'} · ${m2}m² · ${fecha}`,margin,y);y+=8;
-  // Summary box
-  rect(margin,y,pageW-margin*2,28,'F3F1EC');
-  doc.setFontSize(8);doc.setTextColor(136,132,128);
-  const col1=margin+4,col2=margin+55,col3=margin+105,col4=margin+155;
-  txt('COSTE DIRECTO',col1,y+5);txt('MARGEN',col2,y+5);txt('PVP s/IVA',col3,y+5);txt(`PVP + IVA ${iva}%`,col4,y+5);
-  doc.setFontSize(10);doc.setFont('helvetica','bold');doc.setTextColor(26,25,23);
-  txt(fN(tot),col1,y+12);txt(S.mg+'%',col2,y+12);txt(fN(pvp),col3,y+12);txt(fN(pvpIva),col4,y+12);
-  doc.setFontSize(7);doc.setFont('helvetica','normal');doc.setTextColor(136,132,128);
-  txt(`${m2>0?Math.round(tot/m2)+'€/m²':'—'}`,col1,y+18);
-  doc.setFontSize(8);doc.setTextColor(74,72,69);
-  const coTotal=proj.changeOrders?.filter(c=>c.estado!=='rechazado').reduce((s,c)=>s+c.delta,0)||0;
-  if(coTotal!==0){txt(`Incl. cambios: ${coTotal>=0?'+':''}${fN(coTotal)}`,col2,y+18);}
-  y+=32;
-  // Chapters table
-  doc.setFontSize(8);doc.setTextColor(136,132,128);
-  const cols=[margin,margin+8,margin+75,margin+115,margin+130,margin+148,margin+166,pageW-margin];
-  const hdrY=y;
-  rect(margin,hdrY-4,pageW-margin*2,6,'ECEAE4');
-  txt('Nº',cols[0]+1,hdrY);txt('DESCRIPCIÓN',cols[1]+1,hdrY);txt('UNIDAD',cols[2]+1,hdrY);txt('CANT.',cols[3]+1,hdrY,{'align':'right'});
-  txt('PRECIO MAT.',cols[4]+1,hdrY,{'align':'right'});txt('PRECIO M.O.',cols[5]+1,hdrY,{'align':'right'});txt('TOTAL',cols[6]+1,hdrY,{'align':'right'});
-  y+=4;
-  let pageNum=1;
-  function checkPage(){
-    if(y>270){
-      doc.addPage();y=15;pageNum++;
-      // Header on new page
-      doc.setFontSize(8);doc.setTextColor(136,132,128);txt(`${proj.name} · Presupuesto`,margin,y);txt(`Pág ${pageNum}`,pageW-margin-10,y,{align:'right'});y+=6;
-      doc.setDrawColor(208,204,196);line(margin,y,pageW-margin,y);y+=4;
-    }
-  }
-  GROUPS.forEach(g=>{
-    checkPage();
-    const gTotal=grptot(proj,g.id);
-    if(gTotal===0)return;
-    // Group header
-    doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(26,25,23);
-    rect(margin,y-3,pageW-margin*2,5,g.color.replace(')','').replace('rgb(','').replace(/,/g,',')||'F3F1EC');
-    txt(`${g.icon} ${g.name}`,margin+2,y);txt(fN(gTotal),cols[6],y,{align:'right'});
-    y+=4;
-    g.caps.forEach(cId=>{
-      const ch=proj.chapters.find(c=>c.id===cId);if(!ch||!ch.partidas.length)return;
-      const chT=chtot(ch);
-      doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(74,72,69);
-      txt(`${ch.code} · ${ch.name}`,cols[1],y);txt(fN(chT),cols[6],y,{align:'right'});
-      y+=3.5;
-      ch.partidas.forEach((p,idx)=>{
-        checkPage();
-        const pt=ptot(p);
-        doc.setFontSize(7);doc.setFont('helvetica','normal');doc.setTextColor(26,25,23);
-        txt(`${ch.code}-${idx+1}`,cols[0],y);
-        txt(p.name.substring(0,40),cols[1],y);
-        txt(p.ud,cols[2]+20,y,{align:'right'});
-        txt(fN(p.qty,1),cols[3]+10,y,{align:'right'});
-        txt(fN(p.mat_price,2),cols[4]+10,y,{align:'right'});
-        txt(fN(p.mo_price,2),cols[5]+10,y,{align:'right'});
-        doc.setFont('helvetica','bold');txt(fN(pt),cols[6],y,{align:'right'});doc.setFont('helvetica','normal');
-        y+=3.2;
+  const proj=P();
+  if(!proj){showNotification('Error','Selecciona un proyecto primero','error');return;}
+
+  showNotification('Generando PDF...','Por favor espera mientras preparamos el documento','info',2000);
+
+  try{
+    const token=sessionStorage.getItem('buildos_token');
+    if(token){
+      const res=await fetch('/api/export/pdf',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+        body:JSON.stringify({projectId:proj.id,type:'budget'})
       });
-      y+=1.5;
+      const data=await res.json();
+      if(data.error)throw new Error(data.error);
+      const html=generatePDFHTML(data);
+      const win=window.open('','_blank');
+      win.document.write(html);
+      win.document.close();
+      setTimeout(()=>win.print(),500);
+      showNotification('PDF listo','El documento se ha generado correctamente','success');
+      return;
+    }
+  }catch(e){/* fallback to client-side */}
+  generateBudgetPDFClientSide(proj);
+}
+function generatePDFHTML(data){
+  const proj=data.project;
+  const budget=data.budget;
+  const now=new Date().toLocaleDateString('es-ES');
+  let itemsHtml='';
+  budget.groups.forEach(g=>{
+    itemsHtml+=`<tr style="background:#f5f5f0"><td colspan="6" style="padding:8px 12px;font-weight:800;font-size:11px;border:1px solid #ddd">${g.name}</td></tr>`;
+    g.items.forEach(it=>{
+      itemsHtml+=`<tr><td style="padding:6px 12px;font-size:10px;border:1px solid #ddd">${it.description}</td><td style="padding:6px 12px;font-size:10px;border:1px solid #ddd;text-align:center">${it.unit}</td><td style="padding:6px 12px;font-size:10px;border:1px solid #ddd;text-align:right">${it.quantity}</td><td style="padding:6px 12px;font-size:10px;border:1px solid #ddd;text-align:right">€${it.priceMat.toFixed(2)}</td><td style="padding:6px 12px;font-size:10px;border:1px solid #ddd;text-align:right">€${it.priceMO.toFixed(2)}</td><td style="padding:6px 12px;font-size:10px;border:1px solid #ddd;text-align:right;font-weight:700">€${it.total.toFixed(2)}</td></tr>`;
     });
-    y+=2;
   });
-  // Footer totals
-  checkPage();y+=3;
-  doc.setDrawColor(208,204,196);line(margin,y,pageW-margin,y);y+=4;
-  doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(26,25,23);
-  txt('TOTAL GENERAL',margin,y);txt(fN(tot),cols[6],y,{align:'right'});y+=4;
-  doc.setFontSize(8);doc.setFont('helvetica','normal');doc.setTextColor(74,72,69);
-  txt(`Margen ${S.mg}%`,margin,y);txt(fN(pvp-tot),cols[6],y,{align:'right'});y+=4;
-  txt(`PVP sin IVA`,margin,y);txt(fN(pvp),cols[6],y,{align:'right'});y+=4;
-  doc.setFont('helvetica','bold');doc.setTextColor(26,25,23);
-  txt(`PVP + IVA ${iva}%`,margin,y);txt(fN(pvpIva),cols[6],y,{align:'right'});y+=6;
-  // Change orders summary
-  const cos=proj.changeOrders?.filter(c=>c.estado==='aprobado'||c.estado==='pendiente')||[];
-  if(cos.length){
-    checkPage();
-    doc.setFontSize(8);doc.setTextColor(136,132,128);
-    txt('CAMBIOS EN OBRA',margin,y);y+=3.5;
-    doc.setFontSize(7);doc.setTextColor(26,25,23);
-    cos.slice(0,8).forEach(co=>{
-      const dLabel=(co.delta>=0?'+':'-')+fN(Math.abs(co.delta));
-      txt(`[${co.estado.toUpperCase()}] ${co.desc.substring(0,45)}`,cols[1],y);
-      txt(dLabel,cols[6],y,{align:'right'});
-      y+=3;
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Presupuesto ${proj.name}</title><style>body{font-family:system-ui,sans-serif;font-size:11px;color:#333;margin:40px}h1{font-size:18px;margin-bottom:4px}h2{font-size:13px;color:#666;margin-bottom:20px;font-weight:400}table{width:100%;border-collapse:collapse;margin-top:20px}th{background:#f0f0e8;padding:8px 12px;font-size:9px;text-transform:uppercase;letter-spacing:.05em;text-align:left;border:1px solid #ddd}td{}tfoot td{font-weight:800;background:#f8f8f4}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px;border-bottom:2px solid #1a1917;padding-bottom:20px}.logo{font-size:14px;font-weight:900}.date{font-size:10px;color:#666}</style></head><body><div class="header"><div><div class="logo">BUILDOS</div><h1>Presupuesto: ${proj.name}</h1><h2>${proj.address||''}</h2></div><div class="date">Fecha: ${now}<br>Ref: ${proj.id||'-'}</div></div><table><thead><tr><th>Descripción</th><th style="text-align:center">Ud</th><th style="text-align:right">Cant</th><th style="text-align:right">Mat. €</th><th style="text-align:right">M.O. €</th><th style="text-align:right">Total €</th></tr></thead><tbody>${itemsHtml}</tbody><tfoot><tr><td colspan="5" style="text-align:right;padding:8px 12px;border:1px solid #ddd">Total Material:</td><td style="text-align:right;padding:8px 12px;border:1px solid #ddd">€${budget.totals.material.toFixed(2)}</td></tr><tr><td colspan="5" style="text-align:right;padding:8px 12px;border:1px solid #ddd">Total Mano de Obra:</td><td style="text-align:right;padding:8px 12px;border:1px solid #ddd">€${budget.totals.labor.toFixed(2)}</td></tr><tr><td colspan="5" style="text-align:right;padding:8px 12px;border:1px solid #ddd;font-size:14px">TOTAL:</td><td style="text-align:right;padding:8px 12px;border:1px solid #ddd;font-size:14px">€${budget.totals.total.toFixed(2)}</td></tr></tfoot></table><div style="margin-top:30px;font-size:9px;color:#999;text-align:center">Generado por BuildOS — Riverwalk Investments</div></body></html>`;
+}
+function generateBudgetPDFClientSide(proj){
+  const budget=proj.chapters||[];
+  let total=0,totalMat=0,totalMO=0;
+  let itemsHtml='';
+  budget.forEach(ch=>{
+    const chName=ch.name||ch.chapter||'Capítulo';
+    const chCode=ch.code||'';
+    itemsHtml+=`<tr style="background:#f5f5f0"><td colspan="6" style="padding:8px 12px;font-weight:800;font-size:11px;border:1px solid #ddd">${chCode?chCode+' · ':''}${chName}</td></tr>`;
+    (ch.partidas||[]).forEach(p=>{
+      const qty=p.qty||p.quantity||0;
+      const pMat=p.mat_price||p.material_price||0;
+      const pMO=p.mo_price||p.labor_price||0;
+      const subtotal=(pMat+pMO)*qty;
+      total+=subtotal;totalMat+=pMat*qty;totalMO+=pMO*qty;
+      itemsHtml+=`<tr><td style="padding:6px 12px;font-size:10px;border:1px solid #ddd">${p.name||p.description||''}</td><td style="padding:6px 12px;font-size:10px;border:1px solid #ddd;text-align:center">${p.ud||p.unit||'m²'}</td><td style="padding:6px 12px;font-size:10px;border:1px solid #ddd;text-align:right">${qty}</td><td style="padding:6px 12px;font-size:10px;border:1px solid #ddd;text-align:right">€${pMat.toFixed(2)}</td><td style="padding:6px 12px;font-size:10px;border:1px solid #ddd;text-align:right">€${pMO.toFixed(2)}</td><td style="padding:6px 12px;font-size:10px;border:1px solid #ddd;text-align:right;font-weight:700">€${subtotal.toFixed(2)}</td></tr>`;
     });
-    y+=2;
-  }
-  // Legal footer
-  checkPage();y+=4;
-  doc.setDrawColor(208,204,196);line(margin,y,pageW-margin,y);y+=3;
-  doc.setFontSize(6);doc.setFont('helvetica','normal');doc.setTextColor(136,132,128);
-  txt(`Presupuesto generado por BuildOS · Riverwalk Investments · ${fecha} · Este documento no es una factura. Los precios son orientativos y pueden variar según condiciones finales de ejecución.`,margin,y,{maxWidth:pageW-margin*2});
-  // Page numbers
-  const totalPages=doc.getNumberOfPages();
-  for(let i=1;i<=totalPages;i++){
-    doc.setPage(i);
-    doc.setFontSize(7);doc.setTextColor(136,132,128);
-    txt(`Página ${i} de ${totalPages}`,pageW/2,287,{align:'center'});
-  }
-  doc.save(`${(proj.name||'presupuesto').replace(/[^a-z0-9]/gi,'_').substring(0,40)}.pdf`);
-  toast('PDF exportado correctamente');
+  });
+  const now=new Date().toLocaleDateString('es-ES');
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Presupuesto ${proj.name}</title><style>body{font-family:system-ui,sans-serif;font-size:11px;color:#333;margin:40px}h1{font-size:18px;margin-bottom:4px}h2{font-size:13px;color:#666;margin-bottom:20px;font-weight:400}table{width:100%;border-collapse:collapse;margin-top:20px}th{background:#f0f0e8;padding:8px 12px;font-size:9px;text-transform:uppercase;letter-spacing:.05em;text-align:left;border:1px solid #ddd}tfoot td{font-weight:800;background:#f8f8f4}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px;border-bottom:2px solid #1a1917;padding-bottom:20px}.logo{font-size:14px;font-weight:900}.date{font-size:10px;color:#666}</style></head><body><div class="header"><div><div class="logo">BUILDOS</div><h1>Presupuesto: ${proj.name}</h1><h2>${proj.addr||proj.address||''}</h2></div><div class="date">Fecha: ${now}</div></div><table><thead><tr><th>Descripción</th><th style="text-align:center">Ud</th><th style="text-align:right">Cant</th><th style="text-align:right">Mat. €</th><th style="text-align:right">M.O. €</th><th style="text-align:right">Total €</th></tr></thead><tbody>${itemsHtml}</tbody><tfoot><tr><td colspan="5" style="text-align:right;padding:8px 12px;border:1px solid #ddd">Total Material:</td><td style="text-align:right;padding:8px 12px;border:1px solid #ddd">€${totalMat.toFixed(2)}</td></tr><tr><td colspan="5" style="text-align:right;padding:8px 12px;border:1px solid #ddd">Total Mano de Obra:</td><td style="text-align:right;padding:8px 12px;border:1px solid #ddd">€${totalMO.toFixed(2)}</td></tr><tr><td colspan="5" style="text-align:right;padding:8px 12px;border:1px solid #ddd;font-size:14px">TOTAL:</td><td style="text-align:right;padding:8px 12px;border:1px solid #ddd;font-size:14px">€${total.toFixed(2)}</td></tr></tfoot></table><div style="margin-top:30px;font-size:9px;color:#999;text-align:center">Generado por BuildOS — Riverwalk Investments</div></body></html>`;
+  const win=window.open('','_blank');
+  win.document.write(html);
+  win.document.close();
+  setTimeout(()=>win.print(),500);
+  showNotification('PDF generado','El presupuesto se ha exportado correctamente','success');
 }
 // ===== EXPORT CSV =====
 function exportCSV(){
@@ -7104,8 +7257,8 @@ function confirmSAD(){
   else toast('Partida añadida');}
 function openSADmat(chId,pId){const proj=P();const ch=proj.chapters.find(c=>c.id===chId);const p=ch?.partidas.find(p=>p.id===pId);if(!p)return;openSAD(chId);setTimeout(()=>{document.getElementById('sad-name').value=p.name;document.getElementById('sad-ud').value=p.ud;document.getElementById('sad-qty').value=p.qty||'';document.getElementById('sad-mat').value=p.mat_price||'';document.getElementById('sad-mo').value=p.mo_price||'';S.sadMatSel=p.product_id||null;S.sadInstSel=p.installer_id||null;if(S.sadMatSel){const prod=PRODUCTS.find(pr=>pr.id===S.sadMatSel);const sobj=prod?SUPPLIERS.find(s=>s.id===prod.sup):null;document.getElementById('sad-mat-sel-lbl').textContent=prod?`${sobj?sobj.name+' — ':''}${prod.name}`:'Sin material';showRappelHint(prod);}if(S.sadInstSel){const inst=SUPPLIERS.find(s=>s.id===S.sadInstSel);document.getElementById('sad-inst-sel-lbl').textContent=inst?inst.name:'Sin instalador';}sadMatFilter();},60);}
 // ===== INTERACTIONS =====
-let curTab='plan';
-function switchTab(tab){curTab=tab;document.querySelectorAll('.tb').forEach((b,i)=>b.classList.toggle('act',['plan','budget','catalog','analysis','strategy','calendar','medidas','obra'][i]===tab));document.querySelectorAll('.tp').forEach(p=>p.classList.toggle('act',p.id===`tp-${tab}`));if(tab==='catalog')renderCatalogTab();if(tab==='budget')renderBudget();if(tab==='analysis'){if(S.anTab==='oficio')renderOficio();else renderCompletitud();}if(tab==='strategy')renderStrategy();if(tab==='calendar'){document.getElementById('cal-start').value=P()?.timeline?.startDate||new Date().toISOString().split('T')[0];document.getElementById('cal-total-wks').value=P()?.timeline?.totalWeeks||20;renderCalendar();}if(tab==='medidas')renderMedidas();if(tab==='obra'){renderObraTab();if(_waViewActive)initWhatsApp();}if(tab==='stock')renderStockTab();if(tab!=='obra')destroyWhatsApp();}
+let curTab='dashboard';
+function switchTab(tab){curTab=tab;document.querySelectorAll('.tb').forEach((b,i)=>b.classList.toggle('act',['dashboard','plan','budget','catalog','analysis','strategy','calendar','medidas','obra'][i]===tab));document.querySelectorAll('.tp').forEach(p=>p.classList.toggle('act',p.id===`tp-${tab}`));if(tab==='dashboard')renderDashboard();if(tab==='catalog')renderCatalogTab();if(tab==='budget')renderBudget();if(tab==='analysis'){if(S.anTab==='oficio')renderOficio();else renderCompletitud();}if(tab==='strategy')renderStrategy();if(tab==='calendar'){document.getElementById('cal-start').value=P()?.timeline?.startDate||new Date().toISOString().split('T')[0];document.getElementById('cal-total-wks').value=P()?.timeline?.totalWeeks||20;renderCalendar();}if(tab==='medidas')renderMedidas();if(tab==='obra'){renderObraTab();if(_waViewActive)initWhatsApp();}if(tab==='stock')renderStockTab();if(tab!=='obra')destroyWhatsApp();}
 function switchProj(id){S.curProjId=id;renderAll()}
 function toggleGrp(id){const el=document.getElementById('grp-'+id);if(el)el.classList.toggle('open')}
 function toggleCh(id){const el=document.getElementById('ch-'+id);if(el)el.classList.toggle('open')}
@@ -7795,7 +7948,19 @@ function clearZones(){const proj=P();if(proj)proj.plan.zones=[];renderRoomsPanel
 function renderZones(){renderRoomsPanel();}
 
 function closeOv(id){document.getElementById(id).classList.remove('open')}
-function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';clearTimeout(t._t);t._t=setTimeout(()=>t.style.display='none',2800)}
+// Notification center
+function showNotification(title, message, type = 'info', duration = 4000) {
+  const toast = document.getElementById('toast');
+  if (!toast) return;
+  const colors = { info: 'var(--blue)', success: 'var(--green)', warning: 'var(--amber)', error: 'var(--red-m)' };
+  const icon = { info: 'ℹ', success: '✓', warning: '⚠', error: '✕' };
+  toast.innerHTML = `<div style="display:flex;align-items:center;gap:8px"><span style="font-size:14px">${icon[type]}</span><div><div style="font-weight:700;font-size:12px">${title}</div><div style="font-size:11px;opacity:.9;margin-top:1px">${message}</div></div></div>`;
+  toast.style.background = colors[type] || colors.info;
+  toast.style.display = 'block';
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { toast.style.display = 'none'; }, duration);
+}
+function toast(msg){showNotification('', msg, 'info', 3000);}
 
 // ===== DARK MODE =====
 function initDarkMode(){
