@@ -133,7 +133,7 @@ function verifyPassword(password, stored) {
 // ============ DATABASE (SQLite nativo via better-sqlite3 o json fallback) ============
 let db = null;
 let useJsonFallback = false;
-let jsonDb = { users: [], projects: [], budgetItems: [], messages: [], activityLog: [] };
+let jsonDb = { users: [], projects: [], budgetItems: [], messages: [], activityLog: [], notifications: [] };
 
 try {
   const Database = require('better-sqlite3');
@@ -208,6 +208,16 @@ try {
       code TEXT NOT NULL,
       verified INTEGER DEFAULT 0,
       expires_at INTEGER NOT NULL,
+      created_at INTEGER DEFAULT (unixepoch())
+    );
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      title TEXT NOT NULL,
+      message TEXT,
+      type TEXT DEFAULT 'info',
+      read INTEGER DEFAULT 0,
+      link TEXT,
       created_at INTEGER DEFAULT (unixepoch())
     );
   `);
@@ -587,6 +597,289 @@ async function handleProjectsUpdate(req, res, projectId) {
       const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
       send(res, 200, { project });
     }
+  } catch (err) { send(res, 500, { error: err.message }); }
+}
+
+// ============ API: DASHBOARD KPIs ============
+async function handleDashboardKPIs(req, res) {
+  const user = requireAuth(req, res);
+  if (!user) return;
+
+  try {
+    let projects = [];
+    if (useJsonFallback) {
+      projects = user.role === 'admin'
+        ? jsonDb.projects
+        : jsonDb.projects.filter(p => p.created_by === user.id || p.assigned_to === user.id);
+    } else {
+      if (user.role === 'admin') {
+        projects = db.prepare('SELECT * FROM projects ORDER BY created_at DESC').all();
+      } else {
+        projects = db.prepare('SELECT * FROM projects WHERE created_by = ? OR assigned_to = ? ORDER BY created_at DESC')
+          .all(user.id, user.id);
+      }
+      projects.forEach(p => { try { p.budget_data = JSON.parse(p.budget_data || '[]'); } catch { p.budget_data = []; } });
+    }
+
+    const totalProjects = projects.length;
+    const activeProjects = projects.filter(p => p.status === 'active').length;
+    const totalBudget = projects.reduce((sum, p) => sum + (parseFloat(p.budget_total) || 0), 0);
+    const avgBudget = totalProjects > 0 ? totalBudget / totalProjects : 0;
+
+    let totalParts = 0;
+    let completenessSum = 0;
+    let completenessCount = 0;
+    const pendingChanges = 0;
+
+    if (useJsonFallback) {
+      projects.forEach(p => {
+        const items = p.budget_data || [];
+        if (Array.isArray(items)) {
+          totalParts += items.length;
+          items.forEach(item => {
+            if (item && typeof item.completeness === 'number') {
+              completenessSum += item.completeness;
+              completenessCount++;
+            } else if (item && typeof item.progress === 'number') {
+              completenessSum += item.progress;
+              completenessCount++;
+            }
+          });
+        }
+      });
+    } else {
+      const projectIds = projects.map(p => p.id);
+      if (projectIds.length > 0) {
+        const placeholders = projectIds.map(() => '?').join(',');
+        const items = db.prepare(`SELECT * FROM budget_items WHERE project_id IN (${placeholders})`).all(...projectIds);
+        totalParts = items.length;
+        items.forEach(item => {
+          const comp = parseFloat(item.completeness || item.progress || 0);
+          if (comp > 0) { completenessSum += comp; completenessCount++; }
+        });
+      }
+    }
+    const completenessAvg = completenessCount > 0 ? parseFloat((completenessSum / completenessCount).toFixed(1)) : 0;
+
+    let unreadMessages = 0;
+    if (useJsonFallback) {
+      unreadMessages = jsonDb.messages.filter(m => m.direction === 'inbound' && m.status === 'received').length;
+    } else {
+      const row = db.prepare("SELECT COUNT(*) as count FROM whatsapp_messages WHERE direction = 'inbound' AND status = 'received'").get();
+      unreadMessages = row?.count || 0;
+    }
+
+    let recentActivity = [];
+    if (useJsonFallback) {
+      const logs = (jsonDb.activityLog || []).slice(-10).reverse();
+      recentActivity = logs.map(log => {
+        const project = jsonDb.projects.find(p => p.id === log.project_id);
+        return { action: log.action, project: project?.name || '', time: new Date(log.created_at).toISOString() };
+      });
+    } else {
+      const logs = db.prepare('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT 10').all();
+      recentActivity = logs.map(log => ({ action: log.action, project: '', time: new Date(log.created_at * 1000).toISOString() }));
+    }
+
+    const projectsByStatus = {};
+    projects.forEach(p => {
+      const st = p.status || 'draft';
+      projectsByStatus[st] = (projectsByStatus[st] || 0) + 1;
+    });
+
+    const budgetGroupMap = {};
+    if (useJsonFallback) {
+      projects.forEach(p => {
+        const items = p.budget_data || [];
+        if (Array.isArray(items)) {
+          items.forEach(item => {
+            if (!item) return;
+            const group = item.group || item.chapter_id || item.trade || 'General';
+            const amount = parseFloat(item.total || (item.quantity * ((item.priceMat || 0) + (item.priceMO || 0)))) || 0;
+            budgetGroupMap[group] = (budgetGroupMap[group] || 0) + amount;
+          });
+        }
+      });
+    } else {
+      const projectIds = projects.map(p => p.id);
+      if (projectIds.length > 0) {
+        const placeholders = projectIds.map(() => '?').join(',');
+        const items = db.prepare(`SELECT * FROM budget_items WHERE project_id IN (${placeholders})`).all(...projectIds);
+        items.forEach(item => {
+          const group = item.trade || item.chapter_id || 'General';
+          const amount = parseFloat(item.total || (item.quantity * ((item.material_price || 0) + (item.labor_price || 0)))) || 0;
+          budgetGroupMap[group] = (budgetGroupMap[group] || 0) + amount;
+        });
+      }
+    }
+    const budgetByGroup = Object.entries(budgetGroupMap).map(([group, amount]) => ({ group, amount: Math.round(amount * 100) / 100 }));
+
+    send(res, 200, {
+      kpis: {
+        totalProjects,
+        activeProjects,
+        totalBudget: Math.round(totalBudget * 100) / 100,
+        avgBudget: Math.round(avgBudget * 100) / 100,
+        totalParts,
+        completenessAvg,
+        pendingChanges,
+        unreadMessages
+      },
+      recentActivity,
+      projectsByStatus,
+      budgetByGroup
+    });
+  } catch (err) { send(res, 500, { error: err.message }); }
+}
+
+// ============ API: EXPORT PDF ============
+async function handleExportPDF(req, res) {
+  const user = requireAuth(req, res);
+  if (!user) return;
+
+  const { projectId, type = 'full' } = await parseBody(req);
+  if (!projectId) return send(res, 400, { error: 'Falta projectId' });
+
+  try {
+    let project;
+    if (useJsonFallback) {
+      project = jsonDb.projects.find(p => p.id == projectId);
+    } else {
+      project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
+      if (project) try { project.budget_data = JSON.parse(project.budget_data || '[]'); } catch { project.budget_data = []; }
+    }
+    if (!project) return send(res, 404, { error: 'Proyecto no encontrado' });
+    if (user.role !== 'admin' && project.created_by !== user.id && project.assigned_to !== user.id) {
+      return send(res, 403, { error: 'Sin acceso a este proyecto' });
+    }
+
+    let budgetItems = [];
+    if (useJsonFallback) {
+      budgetItems = (project.budget_data || []).map(item => ({
+        description: item?.name || item?.description || '',
+        unit: item?.unit || 'ud',
+        quantity: parseFloat(item?.quantity) || 0,
+        priceMat: parseFloat(item?.priceMat || item?.material_price) || 0,
+        priceMO: parseFloat(item?.priceMO || item?.labor_price) || 0,
+        total: parseFloat(item?.total) || 0,
+        group: item?.group || item?.chapter_id || item?.trade || 'General'
+      }));
+    } else {
+      budgetItems = db.prepare('SELECT * FROM budget_items WHERE project_id = ?').all(projectId).map(item => ({
+        description: item.name || '',
+        unit: item.unit || 'ud',
+        quantity: parseFloat(item.quantity) || 0,
+        priceMat: parseFloat(item.material_price) || 0,
+        priceMO: parseFloat(item.labor_price) || 0,
+        total: parseFloat(item.total) || 0,
+        group: item.trade || item.chapter_id || 'General'
+      }));
+    }
+
+    const groupMap = {};
+    budgetItems.forEach(item => {
+      if (!groupMap[item.group]) groupMap[item.group] = { name: item.group, items: [] };
+      const lineTotal = item.total || (item.quantity * (item.priceMat + item.priceMO));
+      groupMap[item.group].items.push({
+        description: item.description,
+        unit: item.unit,
+        quantity: item.quantity,
+        priceMat: item.priceMat,
+        priceMO: item.priceMO,
+        total: Math.round(lineTotal * 100) / 100
+      });
+    });
+    const groups = Object.values(groupMap);
+
+    const materialTotal = budgetItems.reduce((s, i) => s + (i.quantity * i.priceMat), 0);
+    const laborTotal = budgetItems.reduce((s, i) => s + (i.quantity * i.priceMO), 0);
+    const subtotal = materialTotal + laborTotal;
+    const iva = subtotal * 0.21;
+    const total = subtotal + iva;
+
+    const result = {
+      project: {
+        name: project.name || '',
+        address: project.address || '',
+        budgetTotal: Math.round(parseFloat(project.budget_total || total) * 100) / 100
+      },
+      budget: {
+        groups,
+        totals: {
+          material: Math.round(materialTotal * 100) / 100,
+          labor: Math.round(laborTotal * 100) / 100,
+          total: Math.round(subtotal * 100) / 100,
+          iva: Math.round(iva * 100) / 100
+        }
+      },
+      type,
+      generatedAt: new Date().toISOString()
+    };
+
+    send(res, 200, result);
+  } catch (err) { send(res, 500, { error: err.message }); }
+}
+
+// ============ API: NOTIFICACIONES ============
+function handleNotificationsList(req, res) {
+  const user = requireAuth(req, res);
+  if (!user) return;
+
+  try {
+    let notifications;
+    if (useJsonFallback) {
+      jsonDb.notifications = jsonDb.notifications || [];
+      notifications = jsonDb.notifications
+        .filter(n => n.user_id === user.id || n.user_id === null || n.user_id === undefined)
+        .sort((a, b) => (b.created_at || 0) - (a.created_at || 0))
+        .slice(0, 50);
+    } else {
+      notifications = db.prepare(
+        'SELECT * FROM notifications WHERE user_id IS NULL OR user_id = ? ORDER BY created_at DESC LIMIT 50'
+      ).all(user.id);
+    }
+    send(res, 200, { notifications });
+  } catch (err) { send(res, 500, { error: err.message }); }
+}
+
+async function handleNotificationRead(req, res, id) {
+  const user = requireAuth(req, res);
+  if (!user) return;
+
+  try {
+    if (useJsonFallback) {
+      jsonDb.notifications = jsonDb.notifications || [];
+      const n = jsonDb.notifications.find(n => n.id == id && (n.user_id === user.id || n.user_id === null || n.user_id === undefined));
+      if (!n) return send(res, 404, { error: 'Notificacion no encontrada' });
+      n.read = 1;
+      saveJsonDb();
+    } else {
+      const result = db.prepare(
+        'UPDATE notifications SET read = 1 WHERE id = ? AND (user_id IS NULL OR user_id = ?)'
+      ).run(id, user.id);
+      if (result.changes === 0) return send(res, 404, { error: 'Notificacion no encontrada' });
+    }
+    send(res, 200, { success: true });
+  } catch (err) { send(res, 500, { error: err.message }); }
+}
+
+async function handleNotificationsReadAll(req, res) {
+  const user = requireAuth(req, res);
+  if (!user) return;
+
+  try {
+    if (useJsonFallback) {
+      jsonDb.notifications = jsonDb.notifications || [];
+      jsonDb.notifications.forEach(n => {
+        if (n.user_id === user.id || n.user_id === null || n.user_id === undefined) {
+          n.read = 1;
+        }
+      });
+      saveJsonDb();
+    } else {
+      db.prepare('UPDATE notifications SET read = 1 WHERE user_id IS NULL OR user_id = ?').run(user.id);
+    }
+    send(res, 200, { success: true });
   } catch (err) { send(res, 500, { error: err.message }); }
 }
 
@@ -971,6 +1264,11 @@ const routes = [
   { method: 'GET', path: '/api/messages', handler: handleMessagesList },
   { method: 'GET', path: '/api/messages/phones', handler: handleContactsList },
   { method: 'POST', path: '/api/messages/send', handler: handleSendMessage },
+  { method: 'GET', path: '/api/dashboard/kpis', handler: handleDashboardKPIs },
+  { method: 'POST', path: '/api/export/pdf', handler: handleExportPDF },
+  { method: 'GET', path: '/api/notifications', handler: handleNotificationsList },
+  { method: 'PUT', pattern: /^\/api\/notifications\/(\d+)\/read$/, handler: handleNotificationRead },
+  { method: 'PUT', path: '/api/notifications/read-all', handler: handleNotificationsReadAll },
 ];
 
 async function router(req, res) {
