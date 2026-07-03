@@ -643,6 +643,9 @@ input[type=range]{width:100%;accent-color:var(--blue);cursor:pointer;margin-bott
   /* Catalogo */
   .cat-layout{grid-template-columns:1fr;height:auto}
 
+  /* Dark mode toggle */
+  .dark-mode .dark-toggle{color:var(--yellow)}
+
   /* Panel terminal obra */
   #obra-chat-area{height:calc(100vh - 250px)}
 
@@ -692,6 +695,63 @@ input[type=range]{width:100%;accent-color:var(--blue);cursor:pointer;margin-bott
 @media(min-width:1025px){
   .menu-toggle,.panel-toggle,.overlay{display:none!important}
 }
+
+/* ================================================================
+   DARK MODE
+   ================================================================ */
+body.dark-mode{
+  --bg:#1a1917;--bg2:#252320;--bg3:#302c28;--panel:#2c2824;
+  --ink:#eceae4;--ink2:#c8c4bc;--ink3:#8a8884;
+  --b:#3a3530;--b2:#4a4540;
+}
+body.dark-mode .header{background:#2c2824;border-bottom-color:#3a3530}
+body.dark-mode .sidebar{background:#252320;border-right-color:#3a3530}
+body.dark-mode .right-panel{background:#252320;border-left-color:#3a3530}
+body.dark-mode .tp-act{background:#2c2824}
+body.dark-mode .pr-item:hover,body.dark-mode .tb:hover{background:#302c28}
+body.dark-mode .sb{background:#252320}
+body.dark-mode .tabs{background:#1a1917;border-bottom-color:#3a3530}
+body.dark-mode .ch-c{background:#302c28}
+body.dark-mode .chat-msg{background:#2c2824}
+body.dark-mode .ai-msg{background:#252320}
+body.dark-mode .chat-input{background:#2c2824;border-color:#3a3530}
+body.dark-mode input,body.dark-mode select,body.dark-mode textarea{
+  background:#302c28;border-color:#4a4540;color:var(--ink)
+}
+body.dark-mode .ov{background:rgba(0,0,0,.7)}
+body.dark-mode .mo{background:#2c2824}
+body.dark-mode .modal-tabs{background:#252320;border-color:#3a3530}
+body.dark-mode .mtab:hover,body.dark-mode .mtab.act{background:#302c28}
+body.dark-mode .screen{background:#1a1917}
+body.dark-mode .wiz-steps li:not(.done){background:#302c28;color:#6a6660}
+body.dark-mode .sad-chapter{background:#252320}
+body.dark-mode .sad-preview{background:#1a1917}
+body.dark-mode .change-order-item{background:#252320}
+body.dark-mode .change-order-item.approved{border-color:#0f6e56}
+body.dark-mode .gantt-c{background:#1a1917}
+body.dark-mode .gantt-t{background:#252320}
+body.dark-mode .milestone{background:#2c2824;border-color:#3a3530}
+body.dark-mode .wa-panel{background:#252320;border-color:#3a3530}
+body.dark-mode .wa-msg-in{background:#2c2824}
+body.dark-mode .wa-msg-out{background:#302c28}
+body.dark-mode .wa-input{background:#2c2824;border-color:#3a3530}
+body.dark-mode .plan-toolbar{background:#252320}
+body.dark-mode .canvas-container{background:#1a1917}
+body.dark-mode .zones-panel{background:#252320;border-color:#3a3530}
+
+/* Dark mode toggle button */
+.dark-toggle{
+  background:transparent;
+  border:1px solid var(--b);
+  border-radius:8px;
+  padding:6px 10px;
+  font-size:16px;
+  cursor:pointer;
+  color:var(--ink3);
+  transition:all .2s;
+  margin-left:8px;
+}
+.dark-toggle:hover{color:var(--accent);border-color:var(--accent)}
 </style><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script></head>
 <body>
 <!-- PIN LOGIN OVERLAY -->
@@ -768,6 +828,7 @@ input[type=range]{width:100%;accent-color:var(--blue);cursor:pointer;margin-bott
       <button class="hbtn" id="hdr-admin-btn" onclick="openAdminPanel()" style="display:none;background:var(--red-lt);color:var(--red-m);border-color:var(--red-d)" title="Panel de Administracion">
         ⚙ Admin
       </button>
+      <button class="dark-toggle" id="dark-toggle" onclick="toggleDarkMode()" title="Cambiar tema">🌙</button>
     </div>
   </header>
   <div id="content">
@@ -6286,7 +6347,7 @@ function fK(n){if(!n)return'';return n>=1000?(n/1000).toLocaleString('es-ES',{ma
 function getRappel(supId){return RAPPELS.find(r=>r.supId===supId)}
 function getSpend(supId){let s=0;S.projects.forEach(proj=>proj.chapters.forEach(ch=>ch.partidas.forEach(p=>{if(p.product_id){const pr=PRODUCTS.find(x=>x.id===p.product_id);if(pr&&pr.sup===supId)s+=(parseFloat(p.qty)||0)*(parseFloat(p.mat_price)||0);}})));return s;}
 
-function renderAll(){renderSB();renderHdr();renderBudget();renderRP();renderCatalogTab();updateObraTabBadge();renderChangeOrders();}
+function renderAll(){initDarkMode();renderSB();renderHdr();renderBudget();renderRP();renderCatalogTab();updateObraTabBadge();renderChangeOrders();}
 function renderSB(){
   document.getElementById('proj-list').innerHTML=S.projects.map(p=>{const t=projtot(p);return`<div class="pi${p.id===S.curProjId?' act':''}" onclick="switchProj('${p.id}')"><div class="pi-dot" style="background:${p.color}"></div><div class="pi-name">${p.name}</div><div class="pi-cost">${t>0?fK(t)+'€':''}</div></div>`;}).join('');
   const proj=P();if(!proj)return;
@@ -7735,6 +7796,22 @@ function renderZones(){renderRoomsPanel();}
 
 function closeOv(id){document.getElementById(id).classList.remove('open')}
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';clearTimeout(t._t);t._t=setTimeout(()=>t.style.display='none',2800)}
+
+// ===== DARK MODE =====
+function initDarkMode(){
+  const saved=localStorage.getItem('buildos_dark');
+  if(saved==='true'){document.body.classList.add('dark-mode');updateDarkToggle();}
+}
+function toggleDarkMode(){
+  document.body.classList.toggle('dark-mode');
+  const isDark=document.body.classList.contains('dark-mode');
+  localStorage.setItem('buildos_dark',isDark);
+  updateDarkToggle();
+}
+function updateDarkToggle(){
+  const btn=document.getElementById('dark-toggle');
+  if(btn)btn.textContent=document.body.classList.contains('dark-mode')?'☀️':'🌙';
+}
 
 // ===== GLOBAL SEARCH (Ctrl+K) =====
 function openGlobalSearch(){document.getElementById('mo-search').classList.add('open');document.getElementById('gs-input').value='';document.getElementById('gs-results').innerHTML='';document.getElementById('gs-empty').style.display='block';setTimeout(()=>document.getElementById('gs-input').focus(),50);}
