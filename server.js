@@ -666,41 +666,48 @@ function logActivity(userId, projectId, action, details) {
   } catch (e) { console.error('[ActivityLog]', e); }
 }
 
-// ============ API: AI PROXY ============
+// ============ API: AI PROXY (Multi-Provider) ============
+// Soporta: Kimi (primario) → Claude (fallback) → respuesta de error
 async function handleAIProxy(req, res) {
-  // La IA NO requiere autenticacion - funciona para todos
   const body = await parseBody(req);
+  const startTime = Date.now();
+  const results = { attempts: [], latency: 0 };
 
-  // Leer key: base de datos primero, luego variable de entorno
+  // Provider 1: Kimi/Moonshot (primario)
   const dbKey = getAIKeyFromDb();
   const envKey = CONFIG.KIMI_API_KEY || '';
-  const activeKey = dbKey || envKey;
+  const kimiKey = dbKey || envKey;
 
-  // Usar Kimi si hay API key
-  if (activeKey) {
+  if (kimiKey) {
     try {
-      const response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
+      const r = await fetch('https://api.moonshot.cn/v1/chat/completions', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${activeKey}`,
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${kimiKey}` },
         body: JSON.stringify(body),
       });
-      const data = await response.json();
-      send(res, response.status, data);
-      return;
+      const data = await r.json();
+      results.latency = Date.now() - startTime;
+      results.provider = 'kimi';
+      if (r.ok) {
+        console.log(`[AI] Kimi OK en ${results.latency}ms`);
+        send(res, r.status, { ...data, _provider: 'kimi', _latency: results.latency });
+        return;
+      }
+      results.attempts.push({ provider: 'kimi', status: r.status, error: data.error?.message || data.message });
+      console.warn('[AI] Kimi error:', r.status, data);
     } catch (err) {
-      console.error('[AI] Error Kimi:', err.message);
-      // Fallback a Anthropic
+      results.attempts.push({ provider: 'kimi', error: err.message });
+      console.warn('[AI] Kimi network error:', err.message);
     }
+  } else {
+    results.attempts.push({ provider: 'kimi', error: 'No API key configurada' });
   }
 
-  // Fallback Anthropic
+  // Provider 2: Anthropic Claude (fallback)
   if (CONFIG.ANTHROPIC_API_KEY) {
     try {
       const anthropicBody = {
-        model: body.model || 'claude-3-sonnet-20240229',
+        model: 'claude-3-sonnet-20240229',
         max_tokens: body.max_tokens || 1500,
         messages: body.messages || [],
       };
@@ -708,24 +715,41 @@ async function handleAIProxy(req, res) {
         anthropicBody.system = body.messages[0].content;
         anthropicBody.messages = body.messages.slice(1);
       }
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': CONFIG.ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-        },
+        headers: { 'Content-Type': 'application/json', 'x-api-key': CONFIG.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
         body: JSON.stringify(anthropicBody),
       });
-      const data = await response.json();
-      send(res, response.status, data);
-      return;
+      const data = await r.json();
+      results.latency = Date.now() - startTime;
+      results.provider = 'claude';
+      if (r.ok) {
+        // Normalizar respuesta Claude al formato OpenAI
+        const normalized = {
+          choices: [{ message: { content: data.content?.[0]?.text || data.content || '' }, finish_reason: 'stop' }],
+          model: data.model,
+          usage: data.usage,
+          _provider: 'claude (fallback)',
+          _latency: results.latency
+        };
+        console.log(`[AI] Claude fallback OK en ${results.latency}ms`);
+        send(res, r.status, normalized);
+        return;
+      }
+      results.attempts.push({ provider: 'claude', status: r.status, error: data.error?.message });
     } catch (err) {
-      console.error('[AI] Error Anthropic:', err.message);
+      results.attempts.push({ provider: 'claude', error: err.message });
     }
   }
 
-  send(res, 503, { error: 'Servicio de IA no disponible. Configura KIMI_API_KEY o ANTHROPIC_API_KEY.' });
+  // Ningún provider funcionó
+  results.latency = Date.now() - startTime;
+  console.error('[AI] Todos los providers fallaron:', JSON.stringify(results.attempts));
+  send(res, 503, {
+    error: 'Servicio de IA no disponible temporalmente. Intenta en unos segundos.',
+    _attempts: results.attempts,
+    _latency: results.latency
+  });
 }
 
 // ============ API: WHATSAPP ============
